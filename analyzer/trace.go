@@ -10,12 +10,13 @@ const maxTraceDepth = 5
 
 // traceCtx は後方探索の実行コンテキスト。
 type traceCtx struct {
-	visited map[ssa.Value]bool
-	facts   func(obj types.Object, fact *SentinelFact) bool // ImportObjectFact
+	visited      map[ssa.Value]bool
+	visitedFuncs map[*ssa.Function]bool               // 関数間の循環呼び出し検出
+	facts        func(types.Object, *SentinelFact) bool // ImportObjectFact
 }
 
 // traceValue は SSA値 v から後方に探索し、到達しうる Sentinel Error を返す。
-// handled: Return, Global, Call, Phi, MakeInterface, UnOp, Extract, Const(nil)
+// handled: Return, Global, Call, Phi, MakeInterface, ChangeInterface, UnOp, Extract, Const(nil)
 func traceValue(v ssa.Value, depth int, ctx *traceCtx) []SentinelInfo {
 	if depth > maxTraceDepth {
 		return nil
@@ -53,9 +54,9 @@ func traceValue(v ssa.Value, depth int, ctx *traceCtx) []SentinelInfo {
 		if wrapped := fmtErrorfWrappedArg(x); wrapped != nil {
 			return traceValue(wrapped, depth+1, ctx)
 		}
-		// 静的呼び出し先の Fact を参照
+		// 静的呼び出し先を再帰探索
 		if callee := x.Call.StaticCallee(); callee != nil {
-			return sentinelFromCallee(callee, ctx)
+			return sentinelFromCallee(callee, depth+1, ctx)
 		}
 		return nil
 
@@ -92,26 +93,66 @@ func sentinelFromGlobal(g *ssa.Global) []SentinelInfo {
 	return []SentinelInfo{{PkgPath: pkgPath, Name: name}}
 }
 
-// sentinelFromCallee は呼び出し先関数に付与された SentinelFact を返す。
-func sentinelFromCallee(callee *ssa.Function, ctx *traceCtx) []SentinelInfo {
+// sentinelFromCallee は呼び出し先関数の Sentinel を返す。
+// 優先順位:
+//  1. 既知マッピング（known.go）
+//  2. ImportObjectFact キャッシュ（クロスパッケージや解析済み関数）
+//  3. 同一モジュール内の関数ボディへ直接再帰（depth+1）
+func sentinelFromCallee(callee *ssa.Function, depth int, ctx *traceCtx) []SentinelInfo {
 	if callee.Package() == nil {
 		return nil
 	}
 
-	// 既知マッピングを優先
-	key := callee.RelString(nil)
-	if known, ok := knownErrorMap[key]; ok {
+	// 1. 既知マッピング
+	if known, ok := knownErrorMap[callee.RelString(nil)]; ok {
 		return known
 	}
 
-	// Fact キャッシュを参照
+	// 2. Fact キャッシュ（クロスパッケージ解析済み関数）
 	if ctx.facts != nil {
-		var fact SentinelFact
-		if ctx.facts(callee.Package().Pkg.Scope().Lookup(callee.Name()), &fact) {
-			return fact.Errors
+		if obj := callee.Object(); obj != nil {
+			var fact SentinelFact
+			if ctx.facts(obj, &fact) {
+				return fact.Errors
+			}
 		}
 	}
-	return nil
+
+	// 3. ボディへ直接再帰（同一モジュール内かつ未訪問）
+	if depth > maxTraceDepth {
+		return nil
+	}
+	if callee.Blocks == nil {
+		return nil
+	}
+	if ctx.visitedFuncs[callee] {
+		return nil
+	}
+	ctx.visitedFuncs[callee] = true
+
+	// callee 内の全 Return から Sentinel を収集
+	childCtx := &traceCtx{
+		visited:      make(map[ssa.Value]bool),
+		visitedFuncs: ctx.visitedFuncs,
+		facts:        ctx.facts,
+	}
+	var result []SentinelInfo
+	for _, block := range callee.Blocks {
+		for _, instr := range block.Instrs {
+			ret, ok := instr.(*ssa.Return)
+			if !ok {
+				continue
+			}
+			for _, v := range ret.Results {
+				if !isErrorType(v.Type()) {
+					continue
+				}
+				childCtx.visited = make(map[ssa.Value]bool)
+				result = appendUniq(result, traceValue(v, depth, childCtx))
+			}
+		}
+	}
+	return result
 }
 
 // traceExtract は *ssa.Extract の生成元を辿る。
@@ -127,7 +168,7 @@ func traceExtract(x *ssa.Extract, depth int, ctx *traceCtx) []SentinelInfo {
 			return traceValue(wrapped, depth+1, ctx)
 		}
 		if callee := tup.Call.StaticCallee(); callee != nil {
-			return sentinelFromCallee(callee, ctx)
+			return sentinelFromCallee(callee, depth+1, ctx)
 		}
 	}
 	return nil

@@ -63,7 +63,8 @@ func run(pass *analysis.Pass) (interface{}, error) {
 // collectSentinels は関数内の全 Return 命令から Sentinel Error を収集する。
 func collectSentinels(fn *ssa.Function, pass *analysis.Pass) []SentinelInfo {
 	ctx := &traceCtx{
-		visited: make(map[ssa.Value]bool),
+		visited:      make(map[ssa.Value]bool),
+		visitedFuncs: map[*ssa.Function]bool{fn: true}, // fn 自身を既訪問としてセット
 		facts: func(obj types.Object, fact *SentinelFact) bool {
 			if obj == nil {
 				return false

@@ -120,6 +120,67 @@ pkg/repository/item.go:28:6: GetItem returns sentinels: io.EOF, repository.ErrNo
 
 各行の形式：`<ファイル>:<行>:<列>: <関数名> returns sentinels: <パッケージ名>.<変数名>, ...`
 
+**終了コード**
+
+| コード | 意味 |
+|--------|------|
+| 0 | 診断なし（問題なし） |
+| 1 | 内部エラーまたはパッケージのロード失敗 |
+| 3 | 診断あり（Sentinel Errorを検出） |
+
+### フラグ一覧
+
+| フラグ | デフォルト | 説明 |
+|--------|-----------|------|
+| `-json` | false | 診断を JSON 形式で出力する。CI スクリプトや他ツールとの連携に使う |
+| `-c N` | -1（無効） | 診断行の前後 N 行のソースコードを合わせて出力する |
+| `-test` | true | `_test.go` ファイルも解析対象に含める。`-test=false` で除外 |
+| `-flags` | — | このアナライザーが受け付けるフラグの一覧を JSON で出力して終了する |
+| `-V=full` | — | バイナリのバージョン情報を出力して終了する |
+| `-cpuprofile FILE` | — | CPU プロファイルを指定ファイルに書き出す（パフォーマンス調査用） |
+| `-memprofile FILE` | — | メモリプロファイルを指定ファイルに書き出す |
+| `-trace FILE` | — | 実行トレースを指定ファイルに書き出す |
+| `-debug CHARS` | — | デバッグ出力を有効にする。`f`=ファクト `p`=パッケージ `s`=スコープ `t`=型 `v`=詳細 |
+
+**`-json` 出力の構造：**
+
+```json
+{
+  "パッケージパス": {
+    "sentinelfind": [
+      {
+        "posn": "file.go:8:6",
+        "end":  "file.go:8:6",
+        "message": "FindUser returns sentinels: pkg.ErrFoo"
+      }
+    ]
+  }
+}
+```
+
+**`-c` 使用例：**
+
+```bash
+# 診断行の前後 2 行を表示
+sentinelfind -c 2 ./pkg/...
+```
+
+```
+pkg/repo/user.go:12:6: FindUser returns sentinels: repo.ErrNotFound
+10  var ErrPermission = errors.New("permission denied")
+11
+12  func FindUser(id int) error {
+13      if id <= 0 {
+14          return ErrNotFound
+```
+
+**`-test=false` 使用例：**
+
+```bash
+# テストコード内の関数は解析しない
+sentinelfind -test=false ./...
+```
+
 ### golangci-lint プラグインとして使う
 
 `golangci-lint` の `custom` ローダーに組み込む（将来対応）：

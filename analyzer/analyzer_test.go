@@ -32,3 +32,13 @@ func TestAnalyzer_Opaque(t *testing.T) {
 	testdata := analysistest.TestData()
 	analysistest.Run(t, testdata, analyzer.Analyzer, "opaque")
 }
+
+func TestAnalyzer_Interprocedural(t *testing.T) {
+	testdata := analysistest.TestData()
+	analysistest.Run(t, testdata, analyzer.Analyzer, "interprocedural")
+}
+
+func TestAnalyzer_CrossPackage(t *testing.T) {
+	testdata := analysistest.TestData()
+	analysistest.Run(t, testdata, analyzer.Analyzer, "callee", "caller")
+}
