@@ -3,9 +3,16 @@
 //
 // 使い方:
 //
-//	sentinel-lsp-proxy [--sentinelfind PATH] [--workspace DIR] -- gopls [gopls args...]
+//	sentinel-lsp-proxy [--gopls PATH] [--sentinelfind PATH] [--workspace DIR] [gopls args...]
 //
-// エディタの LSP サーバーコマンドを gopls から sentinel-lsp-proxy に変更して使う。
+// VS Code での設定例:
+//
+//	"go.alternateTools": {"gopls": "/path/to/sentinel-lsp-proxy"},
+//	"go.languageServerFlags": [
+//	  "--gopls=/path/to/gopls",
+//	  "--sentinelfind=/path/to/sentinelfind",
+//	  "--workspace=/path/to/project"
+//	]
 package main
 
 import (
@@ -21,14 +28,13 @@ import (
 )
 
 func main() {
+	goplsPath := flag.String("gopls", "gopls", "gopls バイナリのパス")
 	sentinelfindPath := flag.String("sentinelfind", "sentinelfind", "sentinelfind バイナリのパス")
 	workspace := flag.String("workspace", ".", "解析対象のワークスペースディレクトリ")
 	flag.Parse()
 
-	goplsArgs := flag.Args()
-	if len(goplsArgs) == 0 {
-		goplsArgs = []string{"gopls"}
-	}
+	// flag.Args() には VS Code が渡してくる gopls サブコマンド・フラグ（"serve" など）が入る
+	goplsSubArgs := flag.Args()
 
 	cache, err := buildCache(*sentinelfindPath, *workspace)
 	if err != nil {
@@ -40,7 +46,7 @@ func main() {
 	p := proxy.NewProxy(cache)
 
 	// gopls を子プロセスとして起動
-	gopls := exec.Command(goplsArgs[0], goplsArgs[1:]...)
+	gopls := exec.Command(*goplsPath, goplsSubArgs...)
 	goplsIn, err := gopls.StdinPipe()
 	if err != nil {
 		log.Fatal(err)
@@ -51,7 +57,7 @@ func main() {
 	}
 	gopls.Stderr = os.Stderr
 	if err := gopls.Start(); err != nil {
-		log.Fatalf("sentinel-lsp-proxy: failed to start %s: %v", goplsArgs[0], err)
+		log.Fatalf("sentinel-lsp-proxy: failed to start %s: %v", *goplsPath, err)
 	}
 
 	// エディタ → gopls へのパイプ（リクエストのトラッキング付き）

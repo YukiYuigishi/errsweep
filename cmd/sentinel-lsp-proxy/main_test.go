@@ -77,9 +77,9 @@ func TestE2E_HoverSentinelAppended(t *testing.T) {
 
 	// sentinel-lsp-proxy を起動（gopls の代わりに dummy-gopls を使う）
 	cmd := exec.Command(proxyBin,
+		"--gopls="+dummyGoplsBin,
 		"--sentinelfind="+sentinelfindBin,
 		"--workspace="+ws,
-		"--", dummyGoplsBin,
 	)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -151,9 +151,9 @@ func TestE2E_HoverNoEntry(t *testing.T) {
 	ws := exampleWorkspace(t)
 
 	cmd := exec.Command(proxyBin,
+		"--gopls="+dummyGoplsBin,
 		"--sentinelfind="+sentinelfindBin,
 		"--workspace="+ws,
-		"--", dummyGoplsBin,
 	)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
