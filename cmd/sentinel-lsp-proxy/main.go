@@ -41,7 +41,6 @@ func main() {
 
 	// gopls を子プロセスとして起動
 	gopls := exec.Command(goplsArgs[0], goplsArgs[1:]...)
-	gopls.Stdin = os.Stdin // stdin を渡さない（プロキシが管理）
 	goplsIn, err := gopls.StdinPipe()
 	if err != nil {
 		log.Fatal(err)
@@ -99,7 +98,9 @@ func main() {
 
 // buildCache は sentinelfind -json を実行してキャッシュを構築する。
 func buildCache(sentinelfindPath, workspace string) (proxy.Cache, error) {
-	out, err := exec.Command(sentinelfindPath, "-json", "./...").Output()
+	cmd := exec.Command(sentinelfindPath, "-json", "./...")
+	cmd.Dir = workspace
+	out, err := cmd.Output()
 	if err != nil {
 		// exit code 3 (diagnostics found) は正常
 		if ee, ok := err.(*exec.ExitError); ok && ee.ExitCode() == 3 {
