@@ -1,4 +1,4 @@
-module err-analyze
+module errsweep
 
 go 1.26.1
 

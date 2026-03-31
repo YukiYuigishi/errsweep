@@ -17,7 +17,7 @@ import (
 	"os"
 	"os/exec"
 
-	"err-analyze/proxy"
+	"errsweep/proxy"
 )
 
 func main() {
