@@ -38,6 +38,11 @@ func TestAnalyzer_Interprocedural(t *testing.T) {
 	analysistest.Run(t, testdata, analyzer.Analyzer, "interprocedural")
 }
 
+func TestAnalyzer_Stdlib(t *testing.T) {
+	testdata := analysistest.TestData()
+	analysistest.Run(t, testdata, analyzer.Analyzer, "stdlib")
+}
+
 func TestAnalyzer_CrossPackage(t *testing.T) {
 	testdata := analysistest.TestData()
 	analysistest.Run(t, testdata, analyzer.Analyzer, "callee", "caller")

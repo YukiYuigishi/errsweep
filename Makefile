@@ -1,4 +1,5 @@
-BIN := sentinelfind
+BIN       := sentinelfind
+PROXY_BIN := sentinel-lsp-proxy
 
 .PHONY: all build test test-v test-analyzer test-flags lint clean demo demo-example
 
@@ -6,6 +7,7 @@ all: build
 
 build:
 	go build -o $(BIN) ./cmd/sentinelfind
+	go build -o $(PROXY_BIN) ./cmd/sentinel-lsp-proxy
 
 test:
 	go test ./...
@@ -29,4 +31,4 @@ demo-example: build
 	-cd example && ../$(BIN) ./...
 
 clean:
-	rm -f $(BIN)
+	rm -f $(BIN) $(PROXY_BIN)
