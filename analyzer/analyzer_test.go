@@ -5,7 +5,7 @@ import (
 
 	"golang.org/x/tools/go/analysis/analysistest"
 
-	"errsweep/analyzer"
+	"github.com/YukiYuigishi/errsweep/analyzer"
 )
 
 func TestAnalyzer_Basic(t *testing.T) {

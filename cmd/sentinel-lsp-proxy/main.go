@@ -24,7 +24,7 @@ import (
 	"os"
 	"os/exec"
 
-	"errsweep/proxy"
+	"github.com/YukiYuigishi/errsweep/proxy"
 )
 
 func main() {

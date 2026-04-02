@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"os"
 
-	"errsweep/proxy"
+	"github.com/YukiYuigishi/errsweep/proxy"
 )
 
 func main() {

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"errsweep/proxy"
+	"github.com/YukiYuigishi/errsweep/proxy"
 )
 
 var (
@@ -34,9 +34,9 @@ func TestMain(m *testing.M) {
 		bin string
 		pkg string
 	}{
-		{proxyBin, "errsweep/cmd/sentinel-lsp-proxy"},
-		{sentinelfindBin, "errsweep/cmd/sentinelfind"},
-		{dummyGoplsBin, "errsweep/cmd/sentinel-lsp-proxy/testdata/dummy-gopls"},
+		{proxyBin, "github.com/YukiYuigishi/errsweep/cmd/sentinel-lsp-proxy"},
+		{sentinelfindBin, "github.com/YukiYuigishi/errsweep/cmd/sentinelfind"},
+		{dummyGoplsBin, "github.com/YukiYuigishi/errsweep/cmd/sentinel-lsp-proxy/testdata/dummy-gopls"},
 	} {
 		if out, err := exec.Command("go", "build", "-o", target.bin, target.pkg).CombinedOutput(); err != nil {
 			panic("build failed (" + target.pkg + "): " + string(out))

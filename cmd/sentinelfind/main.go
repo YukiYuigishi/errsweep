@@ -3,7 +3,7 @@ package main
 import (
 	"golang.org/x/tools/go/analysis/singlechecker"
 
-	"errsweep/analyzer"
+	"github.com/YukiYuigishi/errsweep/analyzer"
 )
 
 func main() {

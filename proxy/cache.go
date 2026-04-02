@@ -13,6 +13,9 @@ type CacheEntry struct {
 	Sentinels []string // e.g. ["io.EOF", "sql.ErrNoRows"]
 }
 
+// Markdown は markdown の公開 API。
+func (e *CacheEntry) Markdown() string { return e.markdown() }
+
 // markdown は hover に追記する Markdown テキストを返す。
 func (e *CacheEntry) markdown() string {
 	var sb strings.Builder
@@ -38,6 +41,11 @@ type Cache map[cacheKey]*CacheEntry
 func (c Cache) lookup(file string, line int) (*CacheEntry, bool) {
 	entry, ok := c[cacheKey{file: file, line: line}]
 	return entry, ok
+}
+
+// Lookup は lookup の公開 API。
+func (c Cache) Lookup(file string, line int) (*CacheEntry, bool) {
+	return c.lookup(file, line)
 }
 
 // sentinelfindOutput は `sentinelfind -json` の出力形式。

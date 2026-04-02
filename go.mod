@@ -1,4 +1,4 @@
-module errsweep
+module github.com/YukiYuigishi/errsweep
 
 go 1.26.1
 
