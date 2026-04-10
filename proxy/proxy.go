@@ -101,9 +101,16 @@ func (p *Proxy) processServerMessage(raw []byte, w io.Writer) error {
 	// 2. 関数名による検索（呼び出し側でのホバー）
 	// gopls のホバーレスポンスには関数シグネチャが含まれるため、
 	// そこから関数名を抽出してキャッシュを引く。
+	// SSA は fn.Name() でメソッドを "(*T).Method" と命名するため、
+	// SSA スタイル名を優先し、見つからない場合は単純名にフォールバックする。
 	if !hit {
-		if name := extractFuncNameFromResult(msg.Result); name != "" {
-			entry, hit = p.cache.lookupByFuncName(name)
+		if ssaName, simpleName := extractFuncNamesFromResult(msg.Result); simpleName != "" {
+			if ssaName != "" {
+				entry, hit = p.cache.lookupByFuncName(ssaName)
+			}
+			if !hit {
+				entry, hit = p.cache.lookupByFuncName(simpleName)
+			}
 		}
 	}
 
@@ -178,17 +185,21 @@ func appendSentinelToHover(raw []byte, entry *CacheEntry) ([]byte, error) {
 	return json.Marshal(resp)
 }
 
-// funcNameRe は gopls のホバーレスポンスから関数名を抽出する正規表現。
-// "func FindUser(" や "func (r *Repo) FindUser(" に対応する。
-var funcNameRe = regexp.MustCompile(`\bfunc\s+(?:\([^)]*\)\s+)?(\w+)\s*[(\[]`)
+// funcNameRe は gopls のホバーレスポンスから関数情報を抽出する正規表現。
+// "func FindUser(" → m[1]="", m[2]="FindUser"
+// "func (r *Repo) FindUser(" → m[1]="*Repo", m[2]="FindUser"
+var funcNameRe = regexp.MustCompile(`\bfunc\s+(?:\(\w+\s+(\*?\w+)\)\s+)?(\w+)\s*[(\[]`)
 
-// extractFuncNameFromResult は hover レスポンスの result フィールドから関数名を抽出する。
-func extractFuncNameFromResult(result json.RawMessage) string {
+// extractFuncNamesFromResult は hover レスポンスの result フィールドから
+// SSA スタイル名（"(*T).Method" 形式、メソッドの場合のみ）と単純名を返す。
+// SSA は fn.Name() でメソッドを "(*T).Method" と命名するため、キャッシュ検索は
+// SSA スタイル名を優先し、見つからない場合は単純名にフォールバックする。
+func extractFuncNamesFromResult(result json.RawMessage) (ssaName, simpleName string) {
 	var r struct {
 		Contents json.RawMessage `json:"contents"`
 	}
 	if err := json.Unmarshal(result, &r); err != nil || len(r.Contents) == 0 {
-		return ""
+		return "", ""
 	}
 
 	var text string
@@ -203,10 +214,15 @@ func extractFuncNameFromResult(result json.RawMessage) string {
 	}
 
 	m := funcNameRe.FindStringSubmatch(text)
-	if len(m) < 2 {
-		return ""
+	if len(m) < 3 {
+		return "", ""
 	}
-	return m[1]
+	receiver, name := m[1], m[2]
+	if receiver != "" {
+		// "(*T).Method" または "(T).Method" の形式で SSA スタイル名を組み立てる
+		ssaName = "(" + receiver + ")." + name
+	}
+	return ssaName, name
 }
 
 // idKey は json.RawMessage の id を map のキーに使える文字列に変換する。

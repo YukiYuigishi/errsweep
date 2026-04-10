@@ -222,26 +222,67 @@ func TestProxy_HoverStringContents(t *testing.T) {
 	}
 }
 
-// TestExtractFuncName は gopls のホバーコンテンツから関数名を抽出できることを確認する。
+// TestExtractFuncName は gopls のホバーコンテンツから関数名・レシーバ型を抽出できることを確認する。
+// funcNameRe のグループ: m[1]=レシーバ型（optional）、m[2]=関数名
 func TestExtractFuncName(t *testing.T) {
 	cases := []struct {
-		content string
-		want    string
+		content      string
+		wantReceiver string
+		wantName     string
 	}{
-		{"```go\nfunc FindUser(id int) error\n```", "FindUser"},
-		{"```go\nfunc (r *Repo) FindByID(id int) error\n```", "FindByID"},
-		{"```go\nfunc (r *UserRepository) Create(u User) error\n```", "Create"},
-		{"```go\nfunc Fetch[T any](id T) (T, error)\n```", "Fetch"},
-		{"no function here", ""},
+		{"```go\nfunc FindUser(id int) error\n```", "", "FindUser"},
+		{"```go\nfunc (r *Repo) FindByID(id int) error\n```", "*Repo", "FindByID"},
+		{"```go\nfunc (r *UserRepository) Create(u User) error\n```", "*UserRepository", "Create"},
+		{"```go\nfunc Fetch[T any](id T) (T, error)\n```", "", "Fetch"},
+		{"no function here", "", ""},
 	}
 	for _, tc := range cases {
 		m := funcNameRe.FindStringSubmatch(tc.content)
-		var got string
-		if len(m) >= 2 {
-			got = m[1]
+		var gotReceiver, gotName string
+		if len(m) >= 3 {
+			gotReceiver, gotName = m[1], m[2]
 		}
-		if got != tc.want {
-			t.Errorf("extractFuncName(%q) = %q, want %q", tc.content, got, tc.want)
+		if gotReceiver != tc.wantReceiver || gotName != tc.wantName {
+			t.Errorf("funcNameRe(%q) = (%q, %q), want (%q, %q)",
+				tc.content, gotReceiver, gotName, tc.wantReceiver, tc.wantName)
 		}
+	}
+}
+
+// TestProxy_HoverMethodSSAName は SSA スタイルのメソッド名（"(*T).Method"）で
+// キャッシュが引けることを確認する。
+// sentinelfind は fn.Name() でメソッドを "(*T).Method" と命名するため、
+// ホバーから抽出した単純名 "Method" ではなく SSA スタイル名で検索する必要がある。
+func TestProxy_HoverMethodSSAName(t *testing.T) {
+	// SSA スタイル名でキャッシュに登録（sentinelfind -json の実際の出力形式）
+	cache := newTestCache(map[cacheKey]*CacheEntry{
+		{file: "/workspace/cmd/prepare_rename.go", line: 43}: {
+			FuncName:  "(*prepareRename).Run",
+			Sentinels: []string{"cmd.ErrInvalidRenamePosition"},
+		},
+	})
+	p := NewProxy(cache)
+
+	// 呼び出し側でホバー → 定義行とは一致しない
+	reqBody := hoverRequest(20, "/workspace/handler.go", 15, 5)
+	if err := p.trackRequest(reqBody); err != nil {
+		t.Fatal(err)
+	}
+
+	// gopls が返すホバーには受信者付きシグネチャが含まれる
+	goplsContent := "```go\nfunc (r *prepareRename) Run(ctx context.Context, args ...string) error\n```"
+	respBody := hoverResponse(20, "/workspace/handler.go", 15, goplsContent)
+	var out bytes.Buffer
+	if err := p.processServerMessage(respBody, &out); err != nil {
+		t.Fatal(err)
+	}
+
+	outMsg, err := readMessage(bufio.NewReader(&out))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(string(outMsg), "ErrInvalidRenamePosition") {
+		t.Errorf("method hover with SSA-style cache key should show sentinel info\ngot: %s", outMsg)
 	}
 }
