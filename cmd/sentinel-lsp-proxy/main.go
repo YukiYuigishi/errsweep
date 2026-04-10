@@ -18,7 +18,6 @@ package main
 import (
 	"bufio"
 	"flag"
-	"fmt"
 	"io"
 	"log"
 	"os"
@@ -26,6 +25,9 @@ import (
 
 	"github.com/YukiYuigishi/errsweep/proxy"
 )
+
+// cacheLoader はキャッシュ構築関数。テストで差し替え可能にするためパッケージ変数にしてある。
+var cacheLoader proxy.CacheLoader = proxy.BuildCache
 
 func main() {
 	goplsPath := flag.String("gopls", "gopls", "gopls バイナリのパス")
@@ -36,7 +38,7 @@ func main() {
 	// flag.Args() には VS Code が渡してくる gopls サブコマンド・フラグ（"serve" など）が入る
 	goplsSubArgs := flag.Args()
 
-	cache, err := buildCache(*sentinelfindPath, *workspace)
+	cache, err := cacheLoader(*sentinelfindPath, *workspace)
 	if err != nil {
 		log.Printf("sentinel-lsp-proxy: cache build failed (continuing without sentinels): %v", err)
 		cache = proxy.NewCache()
@@ -102,21 +104,3 @@ func main() {
 	}
 }
 
-// buildCache は sentinelfind -json を実行してキャッシュを構築する。
-func buildCache(sentinelfindPath, workspace string) (proxy.Cache, error) {
-	cmd := exec.Command(sentinelfindPath, "-json", "./...")
-	cmd.Dir = workspace
-	out, err := cmd.Output()
-	if err != nil {
-		// exit code 3 (diagnostics found) は正常
-		if ee, ok := err.(*exec.ExitError); ok && ee.ExitCode() == 3 {
-			// fall through
-		} else if len(out) == 0 {
-			return proxy.NewCache(), fmt.Errorf("buildCache: %w (workspace=%s)", err, workspace)
-		}
-	}
-	if len(out) == 0 {
-		return proxy.NewCache(), nil
-	}
-	return proxy.ParseSentinelfindJSON(out)
-}

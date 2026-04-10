@@ -18,19 +18,21 @@ import (
 	"io"
 	"log"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 
 	"github.com/YukiYuigishi/errsweep/proxy"
 )
 
+// cacheLoader はキャッシュ構築関数。テストで差し替え可能にするためパッケージ変数にしてある。
+var cacheLoader proxy.CacheLoader = proxy.BuildCache
+
 func main() {
 	sentinelfindPath := flag.String("sentinelfind", "sentinelfind", "sentinelfind バイナリのパス")
 	workspace := flag.String("workspace", ".", "解析対象のワークスペースディレクトリ")
 	flag.Parse()
 
-	cache, err := buildCache(*sentinelfindPath, *workspace)
+	cache, err := cacheLoader(*sentinelfindPath, *workspace)
 	if err != nil {
 		log.Printf("sentinel-lsp: cache build failed (continuing without sentinels): %v", err)
 		cache = proxy.NewCache()
@@ -39,24 +41,6 @@ func main() {
 
 	srv := &server{cache: cache}
 	srv.run(os.Stdin, os.Stdout)
-}
-
-// buildCache は sentinelfind -json を実行してキャッシュを構築する。
-func buildCache(sentinelfindPath, workspace string) (proxy.Cache, error) {
-	cmd := exec.Command(sentinelfindPath, "-json", "./...")
-	cmd.Dir = workspace
-	out, err := cmd.Output()
-	if err != nil {
-		if ee, ok := err.(*exec.ExitError); ok && ee.ExitCode() == 3 {
-			// exit code 3 (diagnostics found) は正常
-		} else if len(out) == 0 {
-			return proxy.NewCache(), fmt.Errorf("buildCache: %w (workspace=%s)", err, workspace)
-		}
-	}
-	if len(out) == 0 {
-		return proxy.NewCache(), nil
-	}
-	return proxy.ParseSentinelfindJSON(out)
 }
 
 // --- JSON-RPC 2.0 ---
