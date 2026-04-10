@@ -47,3 +47,8 @@ func TestAnalyzer_CrossPackage(t *testing.T) {
 	testdata := analysistest.TestData()
 	analysistest.Run(t, testdata, analyzer.Analyzer, "callee", "caller")
 }
+
+func TestAnalyzer_FuncVar(t *testing.T) {
+	testdata := analysistest.TestData()
+	analysistest.Run(t, testdata, analyzer.Analyzer, "funcvar")
+}

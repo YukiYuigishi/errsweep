@@ -1,6 +1,7 @@
 package analyzer
 
 import (
+	"go/token"
 	"go/types"
 
 	"golang.org/x/tools/go/ssa"
@@ -11,8 +12,11 @@ const maxTraceDepth = 5
 // traceCtx は後方探索の実行コンテキスト。
 type traceCtx struct {
 	visited      map[ssa.Value]bool
-	visitedFuncs map[*ssa.Function]bool               // 関数間の循環呼び出し検出
+	visitedFuncs map[*ssa.Function]bool                // 関数間の循環呼び出し検出
 	facts        func(types.Object, *SentinelFact) bool // ImportObjectFact
+	// globalFuncs は var f FuncType = Concrete の初期値マップ（DI 解決用）。
+	// analyzer.go の run() で SrcFuncs と pkg.Members["init"] を走査して構築する。
+	globalFuncs map[*ssa.Global]*ssa.Function
 }
 
 // traceValue は SSA値 v から後方に探索し、到達しうる Sentinel Error を返す。
@@ -29,7 +33,8 @@ func traceValue(v ssa.Value, depth int, ctx *traceCtx) []SentinelInfo {
 	switch x := v.(type) {
 	case *ssa.UnOp:
 		// *Global の deref → Sentinel
-		if x.Op == '*' {
+		// token.MUL (14) が SSA の dereference 演算子。'*' (rune 42) とは別物。
+		if x.Op == token.MUL {
 			if g, ok := x.X.(*ssa.Global); ok {
 				return sentinelFromGlobal(g)
 			}
@@ -56,6 +61,10 @@ func traceValue(v ssa.Value, depth int, ctx *traceCtx) []SentinelInfo {
 		}
 		// 静的呼び出し先を再帰探索
 		if callee := x.Call.StaticCallee(); callee != nil {
+			return sentinelFromCallee(callee, depth+1, ctx)
+		}
+		// 関数変数経由の呼び出し（DI パターン: var f FuncType = ConcreteFunc）
+		if callee := resolveIndirectCallee(x.Call, ctx); callee != nil {
 			return sentinelFromCallee(callee, depth+1, ctx)
 		}
 		return nil
@@ -170,6 +179,92 @@ func traceExtract(x *ssa.Extract, depth int, ctx *traceCtx) []SentinelInfo {
 		if callee := tup.Call.StaticCallee(); callee != nil {
 			return sentinelFromCallee(callee, depth+1, ctx)
 		}
+		// 関数変数経由の呼び出し（DI パターン）
+		if callee := resolveIndirectCallee(tup.Call, ctx); callee != nil {
+			return sentinelFromCallee(callee, depth+1, ctx)
+		}
+	}
+	return nil
+}
+
+// resolveIndirectCallee は静的解決できない呼び出しに対して、
+// ctx.globalFuncs から具体的な *ssa.Function を返す。
+// 解決できない場合（引数・ローカル変数経由など）は nil を返す。
+func resolveIndirectCallee(call ssa.CallCommon, ctx *traceCtx) *ssa.Function {
+	if call.StaticCallee() != nil {
+		return nil // 静的呼び出しは呼び出し元で処理済み
+	}
+	if ctx.globalFuncs == nil {
+		return nil
+	}
+	// 関数変数のロード: t = *globalVar
+	// token.MUL (14) が dereference 演算子。'*' (rune 42) とは別物なので注意。
+	unop, ok := call.Value.(*ssa.UnOp)
+	if !ok || unop.Op != token.MUL {
+		return nil
+	}
+	g, ok := unop.X.(*ssa.Global)
+	if !ok {
+		return nil
+	}
+	return ctx.globalFuncs[g]
+}
+
+// BuildGlobalFuncMap は SSA の全関数（SrcFuncs + pkg.Members["init"]）を走査し、
+// var f FuncType = ConcreteFunc パターンで初期化されたグローバル変数のマップを構築する。
+//
+// var f FuncType = ConcreteFunc の SSA 表現（init 内）:
+//   t4 = changetype FuncType <- func(...) (ConcreteFunc)  ; *ssa.ChangeType
+//   *f = t4                                                ; *ssa.Store
+func BuildGlobalFuncMap(srcFuncs []*ssa.Function, pkg *ssa.Package) map[*ssa.Global]*ssa.Function {
+	m := make(map[*ssa.Global]*ssa.Function)
+
+	searchFn := func(fn *ssa.Function) {
+		if fn == nil || fn.Blocks == nil {
+			return
+		}
+		for _, block := range fn.Blocks {
+			for _, instr := range block.Instrs {
+				store, ok := instr.(*ssa.Store)
+				if !ok {
+					continue
+				}
+				g, ok := store.Addr.(*ssa.Global)
+				if !ok {
+					continue
+				}
+				if f := funcFromSSAValue(store.Val); f != nil {
+					m[g] = f
+				}
+			}
+		}
+	}
+
+	for _, fn := range srcFuncs {
+		searchFn(fn)
+	}
+	// pkg.Members["init"] はパッケージレベル var の初期化 Store を含む
+	if pkg != nil {
+		if initFn, ok := pkg.Members["init"].(*ssa.Function); ok {
+			searchFn(initFn)
+		}
+	}
+	return m
+}
+
+// funcFromSSAValue は SSA 値から *ssa.Function を取り出す。
+// var f FuncType = Concrete では ChangeType でラップされるため再帰的に剥がす。
+func funcFromSSAValue(v ssa.Value) *ssa.Function {
+	switch x := v.(type) {
+	case *ssa.Function:
+		return x
+	case *ssa.ChangeType:
+		// 具名関数型への変換: changetype FuncType <- func() error (concrete)
+		return funcFromSSAValue(x.X)
+	case *ssa.MakeClosure:
+		if fn, ok := x.Fn.(*ssa.Function); ok {
+			return fn
+		}
 	}
 	return nil
 }
@@ -201,3 +296,4 @@ func appendUniq(dst []SentinelInfo, src []SentinelInfo) []SentinelInfo {
 	}
 	return dst
 }
+

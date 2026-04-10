@@ -24,6 +24,9 @@ var Analyzer = &analysis.Analyzer{
 func run(pass *analysis.Pass) (interface{}, error) {
 	ssaResult := pass.ResultOf[buildssa.Analyzer].(*buildssa.SSA)
 
+	// var f FuncType = ConcreteFunc パターンのグローバル関数変数マップを事前構築（DI 解決用）
+	globalFuncs := BuildGlobalFuncMap(ssaResult.SrcFuncs, ssaResult.Pkg)
+
 	for _, fn := range ssaResult.SrcFuncs {
 		if fn.Blocks == nil {
 			continue
@@ -35,7 +38,7 @@ func run(pass *analysis.Pass) (interface{}, error) {
 			continue
 		}
 
-		sentinels := collectSentinels(fn, pass)
+		sentinels := collectSentinels(fn, pass, globalFuncs)
 
 		if len(sentinels) == 0 {
 			continue
@@ -61,7 +64,7 @@ func run(pass *analysis.Pass) (interface{}, error) {
 }
 
 // collectSentinels は関数内の全 Return 命令から Sentinel Error を収集する。
-func collectSentinels(fn *ssa.Function, pass *analysis.Pass) []SentinelInfo {
+func collectSentinels(fn *ssa.Function, pass *analysis.Pass, globalFuncs map[*ssa.Global]*ssa.Function) []SentinelInfo {
 	ctx := &traceCtx{
 		visited:      make(map[ssa.Value]bool),
 		visitedFuncs: map[*ssa.Function]bool{fn: true}, // fn 自身を既訪問としてセット
@@ -71,6 +74,7 @@ func collectSentinels(fn *ssa.Function, pass *analysis.Pass) []SentinelInfo {
 			}
 			return pass.ImportObjectFact(obj, fact)
 		},
+		globalFuncs: globalFuncs,
 	}
 
 	var result []SentinelInfo
