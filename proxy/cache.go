@@ -34,18 +34,47 @@ type cacheKey struct {
 	line int
 }
 
-// Cache はファイル位置 → CacheEntry のマッピング。
-type Cache map[cacheKey]*CacheEntry
+// Cache はファイル位置 → CacheEntry および関数名 → CacheEntry の二重インデックス。
+// byFuncName は呼び出し側でのホバー時（定義行でないホバー）に使う。
+// 同名関数が複数パッケージに存在する場合は最後に登録されたエントリが勝つ。
+type Cache struct {
+	byLocation map[cacheKey]*CacheEntry
+	byFuncName map[string]*CacheEntry // FuncName → entry
+}
+
+// NewCache は空の Cache を生成する。
+func NewCache() Cache {
+	return Cache{
+		byLocation: make(map[cacheKey]*CacheEntry),
+		byFuncName: make(map[string]*CacheEntry),
+	}
+}
+
+// Len はロケーションインデックスのエントリ数を返す。
+func (c Cache) Len() int { return len(c.byLocation) }
+
+// addEntry はエントリを両方のインデックスに登録する。
+func (c *Cache) addEntry(key cacheKey, entry *CacheEntry) {
+	c.byLocation[key] = entry
+	c.byFuncName[entry.FuncName] = entry
+}
 
 // lookup は指定ファイル・行番号の CacheEntry を返す。
 func (c Cache) lookup(file string, line int) (*CacheEntry, bool) {
-	entry, ok := c[cacheKey{file: file, line: line}]
+	entry, ok := c.byLocation[cacheKey{file: file, line: line}]
 	return entry, ok
 }
 
 // Lookup は lookup の公開 API。
 func (c Cache) Lookup(file string, line int) (*CacheEntry, bool) {
 	return c.lookup(file, line)
+}
+
+// lookupByFuncName は関数名で CacheEntry を返す。
+// 呼び出し側でのホバー時のフォールバックとして使う。
+func (c Cache) lookupByFuncName(name string) (*CacheEntry, bool) {
+	entry, ok := c.byFuncName[name]
+	return entry, ok
 }
 
 // sentinelfindOutput は `sentinelfind -json` の出力形式。
@@ -62,10 +91,10 @@ func ParseSentinelfindJSON(data []byte) (Cache, error) { return parseSentinelfin
 func parseSentinelfindJSON(data []byte) (Cache, error) {
 	var out sentinelfindOutput
 	if err := json.Unmarshal(data, &out); err != nil {
-		return nil, fmt.Errorf("parseSentinelfindJSON: %w", err)
+		return NewCache(), fmt.Errorf("parseSentinelfindJSON: %w", err)
 	}
 
-	cache := make(Cache)
+	cache := NewCache()
 	for _, checks := range out {
 		for _, diags := range checks {
 			for _, d := range diags {
@@ -77,10 +106,11 @@ func parseSentinelfindJSON(data []byte) (Cache, error) {
 				if err != nil {
 					continue
 				}
-				cache[cacheKey{file: file, line: line}] = &CacheEntry{
+				entry := &CacheEntry{
 					FuncName:  funcName,
 					Sentinels: sentinels,
 				}
+				cache.addEntry(cacheKey{file: file, line: line}, entry)
 			}
 		}
 	}

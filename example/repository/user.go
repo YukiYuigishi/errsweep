@@ -13,6 +13,7 @@ func FindByID(id int) (string, error) {
 }
 
 func Create(name string) error {
+
 	if name == "alice" {
 		return ErrDuplicate
 	}

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -94,7 +95,18 @@ func (p *Proxy) processServerMessage(raw []byte, w io.Writer) error {
 		return writeMessage(w, raw)
 	}
 
+	// 1. 定義行による検索（定義ファイルでのホバー）
 	entry, hit := p.cache.lookup(req.file, req.line)
+
+	// 2. 関数名による検索（呼び出し側でのホバー）
+	// gopls のホバーレスポンスには関数シグネチャが含まれるため、
+	// そこから関数名を抽出してキャッシュを引く。
+	if !hit {
+		if name := extractFuncNameFromResult(msg.Result); name != "" {
+			entry, hit = p.cache.lookupByFuncName(name)
+		}
+	}
+
 	if !hit {
 		return writeMessage(w, raw)
 	}
@@ -164,6 +176,37 @@ func appendSentinelToHover(raw []byte, entry *CacheEntry) ([]byte, error) {
 	resp["result"] = newResult
 
 	return json.Marshal(resp)
+}
+
+// funcNameRe は gopls のホバーレスポンスから関数名を抽出する正規表現。
+// "func FindUser(" や "func (r *Repo) FindUser(" に対応する。
+var funcNameRe = regexp.MustCompile(`\bfunc\s+(?:\([^)]*\)\s+)?(\w+)\s*[(\[]`)
+
+// extractFuncNameFromResult は hover レスポンスの result フィールドから関数名を抽出する。
+func extractFuncNameFromResult(result json.RawMessage) string {
+	var r struct {
+		Contents json.RawMessage `json:"contents"`
+	}
+	if err := json.Unmarshal(result, &r); err != nil || len(r.Contents) == 0 {
+		return ""
+	}
+
+	var text string
+	var markup struct {
+		Kind  string `json:"kind"`
+		Value string `json:"value"`
+	}
+	if err := json.Unmarshal(r.Contents, &markup); err == nil && markup.Kind != "" {
+		text = markup.Value
+	} else {
+		_ = json.Unmarshal(r.Contents, &text)
+	}
+
+	m := funcNameRe.FindStringSubmatch(text)
+	if len(m) < 2 {
+		return ""
+	}
+	return m[1]
 }
 
 // idKey は json.RawMessage の id を map のキーに使える文字列に変換する。

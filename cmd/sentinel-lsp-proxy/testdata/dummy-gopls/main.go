@@ -23,6 +23,7 @@ func main() {
 			JSONRPC string          `json:"jsonrpc"`
 			ID      json.RawMessage `json:"id,omitempty"`
 			Method  string          `json:"method,omitempty"`
+			Params  json.RawMessage `json:"params,omitempty"`
 		}
 		if err := json.Unmarshal(raw, &msg); err != nil {
 			continue
@@ -40,11 +41,23 @@ func main() {
 		case "shutdown":
 			result = nil
 		case "textDocument/hover":
-			result = map[string]interface{}{
-				"contents": map[string]interface{}{
-					"kind":  "markdown",
-					"value": "```go\nfunc GetUser(id int) (string, error)\n```",
-				},
+			// line 0（package 宣言など）は real gopls 同様 null を返す。
+			// それ以外は固定のシグネチャを返す。
+			var params struct {
+				Position struct {
+					Line int `json:"line"`
+				} `json:"position"`
+			}
+			_ = json.Unmarshal(msg.Params, &params)
+			if params.Position.Line == 0 {
+				result = nil
+			} else {
+				result = map[string]interface{}{
+					"contents": map[string]interface{}{
+						"kind":  "markdown",
+						"value": "```go\nfunc GetUser(id int) (string, error)\n```",
+					},
+				}
 			}
 		default:
 			result = nil

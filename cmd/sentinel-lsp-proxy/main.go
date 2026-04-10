@@ -39,9 +39,9 @@ func main() {
 	cache, err := buildCache(*sentinelfindPath, *workspace)
 	if err != nil {
 		log.Printf("sentinel-lsp-proxy: cache build failed (continuing without sentinels): %v", err)
-		cache = make(proxy.Cache)
+		cache = proxy.NewCache()
 	}
-	log.Printf("sentinel-lsp-proxy: loaded %d entries from sentinelfind", len(cache))
+	log.Printf("sentinel-lsp-proxy: loaded %d entries from sentinelfind", cache.Len())
 
 	p := proxy.NewProxy(cache)
 
@@ -112,11 +112,11 @@ func buildCache(sentinelfindPath, workspace string) (proxy.Cache, error) {
 		if ee, ok := err.(*exec.ExitError); ok && ee.ExitCode() == 3 {
 			// fall through
 		} else if len(out) == 0 {
-			return nil, fmt.Errorf("buildCache: %w (workspace=%s)", err, workspace)
+			return proxy.NewCache(), fmt.Errorf("buildCache: %w (workspace=%s)", err, workspace)
 		}
 	}
 	if len(out) == 0 {
-		return make(proxy.Cache), nil
+		return proxy.NewCache(), nil
 	}
 	return proxy.ParseSentinelfindJSON(out)
 }

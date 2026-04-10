@@ -48,10 +48,18 @@ func frameMessage(body []byte) string {
 	return fmt.Sprintf("Content-Length: %d\r\n\r\n%s", len(body), body)
 }
 
+// newTestCache はテスト用の Cache を生成する。
+func newTestCache(entries map[cacheKey]*CacheEntry) Cache {
+	c := NewCache()
+	for k, v := range entries {
+		c.addEntry(k, v)
+	}
+	return c
+}
+
 // TestProxy_NonHover はホバー以外のメッセージが変更されずに通過することを確認する。
 func TestProxy_NonHover(t *testing.T) {
-	cache := make(Cache)
-	p := NewProxy(cache)
+	p := NewProxy(NewCache())
 
 	msg := []byte(`{"jsonrpc":"2.0","id":1,"result":{"capabilities":{}}}`)
 	var out bytes.Buffer
@@ -68,8 +76,7 @@ func TestProxy_NonHover(t *testing.T) {
 
 // TestProxy_HoverNoCache はキャッシュに対応エントリがない場合に元のレスポンスが変更されないことを確認する。
 func TestProxy_HoverNoCache(t *testing.T) {
-	cache := make(Cache)
-	p := NewProxy(cache)
+	p := NewProxy(NewCache())
 
 	// hover リクエストを先に登録
 	reqBody := hoverRequest(1, "/workspace/foo.go", 10, 5)
@@ -95,12 +102,12 @@ func TestProxy_HoverNoCache(t *testing.T) {
 
 // TestProxy_HoverWithCache はキャッシュヒット時に Sentinel 情報が Markdown に追記されることを確認する。
 func TestProxy_HoverWithCache(t *testing.T) {
-	cache := Cache{
-		cacheKey{file: "/workspace/repository/user.go", line: 8}: {
+	cache := newTestCache(map[cacheKey]*CacheEntry{
+		{file: "/workspace/repository/user.go", line: 8}: {
 			FuncName:  "FindByID",
 			Sentinels: []string{"repository.ErrNotFound"},
 		},
-	}
+	})
 	p := NewProxy(cache)
 
 	reqBody := hoverRequest(2, "/workspace/repository/user.go", 8, 5)
@@ -140,14 +147,50 @@ func TestProxy_HoverWithCache(t *testing.T) {
 	}
 }
 
+// TestProxy_HoverCallSite は呼び出し側でホバーした場合でも
+// gopls レスポンスの関数名でキャッシュが引けることを確認する。
+func TestProxy_HoverCallSite(t *testing.T) {
+	// キャッシュは定義ファイル側の行に登録されている
+	cache := newTestCache(map[cacheKey]*CacheEntry{
+		{file: "/workspace/repository/user.go", line: 8}: {
+			FuncName:  "FindByID",
+			Sentinels: []string{"repository.ErrNotFound"},
+		},
+	})
+	p := NewProxy(cache)
+
+	// 呼び出し側（usecase/user.go の 20 行目）でホバー → 定義行とは一致しない
+	reqBody := hoverRequest(10, "/workspace/usecase/user.go", 20, 12)
+	if err := p.trackRequest(reqBody); err != nil {
+		t.Fatal(err)
+	}
+
+	// gopls が返すホバー内容には関数シグネチャが含まれる
+	goplsContent := "```go\nfunc (r *UserRepository) FindByID(id int) (string, error)\n```"
+	respBody := hoverResponse(10, "/workspace/usecase/user.go", 20, goplsContent)
+	var out bytes.Buffer
+	if err := p.processServerMessage(respBody, &out); err != nil {
+		t.Fatal(err)
+	}
+
+	outMsg, err := readMessage(bufio.NewReader(&out))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(string(outMsg), "repository.ErrNotFound") {
+		t.Errorf("call-site hover should show sentinel info via func-name lookup\ngot: %s", outMsg)
+	}
+}
+
 // TestProxy_HoverStringContents は contents が文字列形式の hover にも対応することを確認する。
 func TestProxy_HoverStringContents(t *testing.T) {
-	cache := Cache{
-		cacheKey{file: "/src/pkg.go", line: 3}: {
+	cache := newTestCache(map[cacheKey]*CacheEntry{
+		{file: "/src/pkg.go", line: 3}: {
 			FuncName:  "Do",
 			Sentinels: []string{"pkg.ErrFoo"},
 		},
-	}
+	})
 	p := NewProxy(cache)
 
 	reqBody := hoverRequest(3, "/src/pkg.go", 3, 5)
@@ -176,5 +219,29 @@ func TestProxy_HoverStringContents(t *testing.T) {
 	}
 	if !strings.Contains(string(outMsg), "pkg.ErrFoo") {
 		t.Errorf("string-contents hover should also get sentinel info\ngot: %s", outMsg)
+	}
+}
+
+// TestExtractFuncName は gopls のホバーコンテンツから関数名を抽出できることを確認する。
+func TestExtractFuncName(t *testing.T) {
+	cases := []struct {
+		content string
+		want    string
+	}{
+		{"```go\nfunc FindUser(id int) error\n```", "FindUser"},
+		{"```go\nfunc (r *Repo) FindByID(id int) error\n```", "FindByID"},
+		{"```go\nfunc (r *UserRepository) Create(u User) error\n```", "Create"},
+		{"```go\nfunc Fetch[T any](id T) (T, error)\n```", "Fetch"},
+		{"no function here", ""},
+	}
+	for _, tc := range cases {
+		m := funcNameRe.FindStringSubmatch(tc.content)
+		var got string
+		if len(m) >= 2 {
+			got = m[1]
+		}
+		if got != tc.want {
+			t.Errorf("extractFuncName(%q) = %q, want %q", tc.content, got, tc.want)
+		}
 	}
 }

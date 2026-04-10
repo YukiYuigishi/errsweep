@@ -41,7 +41,7 @@ func runOne(t *testing.T, s *server, reqBody []byte) *bytes.Buffer {
 }
 
 func TestServer_Initialize(t *testing.T) {
-	s := &server{cache: make(proxy.Cache)}
+	s := &server{cache: proxy.NewCache()}
 
 	req := map[string]interface{}{
 		"jsonrpc": "2.0",
@@ -122,7 +122,7 @@ func TestServer_HoverHit(t *testing.T) {
 }
 
 func TestServer_HoverMiss(t *testing.T) {
-	s := &server{cache: make(proxy.Cache)}
+	s := &server{cache: proxy.NewCache()}
 
 	hoverReq := map[string]interface{}{
 		"jsonrpc": "2.0",
@@ -145,7 +145,7 @@ func TestServer_HoverMiss(t *testing.T) {
 }
 
 func TestServer_UnknownMethod(t *testing.T) {
-	s := &server{cache: make(proxy.Cache)}
+	s := &server{cache: proxy.NewCache()}
 
 	req := map[string]interface{}{
 		"jsonrpc": "2.0",

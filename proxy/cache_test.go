@@ -35,7 +35,7 @@ func TestCache_ParseJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(c) == 0 {
+	if len(c.byLocation) == 0 {
 		t.Fatal("cache is empty")
 	}
 }
@@ -68,6 +68,28 @@ func TestCache_LookupMiss(t *testing.T) {
 	_, ok := c.lookup("/workspace/repository/user.go", 99)
 	if ok {
 		t.Error("expected miss for non-existent line")
+	}
+}
+
+func TestCache_LookupByFuncName(t *testing.T) {
+	c, err := parseSentinelfindJSON([]byte(sampleJSON))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 関数名でも引けること
+	entry, ok := c.lookupByFuncName("FindByID")
+	if !ok {
+		t.Fatal("entry not found by func name FindByID")
+	}
+	if len(entry.Sentinels) == 0 || entry.Sentinels[0] != "repository.ErrNotFound" {
+		t.Errorf("unexpected sentinels: %v", entry.Sentinels)
+	}
+
+	// 存在しない関数名はミス
+	_, ok = c.lookupByFuncName("NoSuchFunc")
+	if ok {
+		t.Error("expected miss for unknown func name")
 	}
 }
 

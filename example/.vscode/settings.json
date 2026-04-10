@@ -1,0 +1,10 @@
+{
+  "go.lintTool": "staticcheck",
+  "go.alternateTools": {
+    "staticcheck": "sentinelfind"
+  },
+  "go.lintOnSave": "package",
+  "gopls": {
+    "ui.diagnostic.staticcheck": false
+  }
+}
