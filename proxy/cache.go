@@ -3,6 +3,7 @@ package proxy
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -10,16 +11,38 @@ import (
 // CacheEntry は1関数分の解析結果。
 type CacheEntry struct {
 	FuncName  string
-	Sentinels []string // e.g. ["io.EOF", "sql.ErrNoRows"]
+	Sentinels []string // union: e.g. ["io.EOF", "sql.ErrNoRows"]
+	// ByConcrete は多 concrete DI の内訳。複数 concrete が検出された場合のみ非 nil。
+	// キーは concrete 型名（例: "*repository.TagRepository"）、値はその concrete が返す sentinel 群。
+	ByConcrete map[string][]string
 }
 
 // Markdown は markdown の公開 API。
 func (e *CacheEntry) Markdown() string { return e.markdown() }
 
 // markdown は hover に追記する Markdown テキストを返す。
+// 多 concrete の場合は concrete ごとにグルーピングし、そうでなければ平坦なリストで表示する。
 func (e *CacheEntry) markdown() string {
 	var sb strings.Builder
 	sb.WriteString("---\n**Possible Sentinel Errors:**\n")
+	if len(e.ByConcrete) > 1 {
+		concretes := make([]string, 0, len(e.ByConcrete))
+		for c := range e.ByConcrete {
+			concretes = append(concretes, c)
+		}
+		sort.Strings(concretes)
+		for _, c := range concretes {
+			sb.WriteString("- via `")
+			sb.WriteString(c)
+			sb.WriteString("`:\n")
+			for _, s := range e.ByConcrete[c] {
+				sb.WriteString("  - `")
+				sb.WriteString(s)
+				sb.WriteString("`\n")
+			}
+		}
+		return sb.String()
+	}
 	for _, s := range e.Sentinels {
 		sb.WriteString("- `")
 		sb.WriteString(s)
@@ -59,6 +82,26 @@ func (c *Cache) addEntry(key cacheKey, entry *CacheEntry) {
 	c.byFuncName[entry.FuncName] = entry
 }
 
+// unionSentinels は a と b を重複排除してソートしたスライスを返す。
+func unionSentinels(a, b []string) []string {
+	seen := make(map[string]bool, len(a)+len(b))
+	out := make([]string, 0, len(a)+len(b))
+	for _, s := range a {
+		if !seen[s] {
+			seen[s] = true
+			out = append(out, s)
+		}
+	}
+	for _, s := range b {
+		if !seen[s] {
+			seen[s] = true
+			out = append(out, s)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
 // lookup は指定ファイル・行番号の CacheEntry を返す。
 func (c Cache) lookup(file string, line int) (*CacheEntry, bool) {
 	entry, ok := c.byLocation[cacheKey{file: file, line: line}]
@@ -88,6 +131,8 @@ type sentinelfindOutput map[string]map[string][]struct {
 func ParseSentinelfindJSON(data []byte) (Cache, error) { return parseSentinelfindJSON(data) }
 
 // parseSentinelfindJSON は `sentinelfind -json` の出力を Cache に変換する。
+// 同一 file:line に複数診断がある場合（例: 合算ライン + per-concrete 内訳ライン）は
+// エントリを上書きせず、sentinels を union し ByConcrete に内訳を蓄積する。
 func parseSentinelfindJSON(data []byte) (Cache, error) {
 	var out sentinelfindOutput
 	if err := json.Unmarshal(data, &out); err != nil {
@@ -102,15 +147,23 @@ func parseSentinelfindJSON(data []byte) (Cache, error) {
 				if err != nil {
 					continue
 				}
-				funcName, sentinels, err := parseDiagMessage(d.Message)
+				funcName, concrete, sentinels, err := parseDiagMessage(d.Message)
 				if err != nil {
 					continue
 				}
-				entry := &CacheEntry{
-					FuncName:  funcName,
-					Sentinels: sentinels,
+				key := cacheKey{file: file, line: line}
+				entry := cache.byLocation[key]
+				if entry == nil {
+					entry = &CacheEntry{FuncName: funcName}
+					cache.addEntry(key, entry)
 				}
-				cache.addEntry(cacheKey{file: file, line: line}, entry)
+				entry.Sentinels = unionSentinels(entry.Sentinels, sentinels)
+				if concrete != "" {
+					if entry.ByConcrete == nil {
+						entry.ByConcrete = make(map[string][]string)
+					}
+					entry.ByConcrete[concrete] = sentinels
+				}
 			}
 		}
 	}
@@ -137,20 +190,40 @@ func parsePosn(posn string) (file string, line int, err error) {
 	return rest[:mid], n, nil
 }
 
-// parseDiagMessage は "FuncName returns sentinels: a, b, c" を分解する。
-func parseDiagMessage(msg string) (funcName string, sentinels []string, err error) {
-	const marker = " returns sentinels: "
+// parseDiagMessage は analyzer が emit する 2 種類の診断メッセージを分解する:
+//
+//	"FuncName returns sentinels: a, b, c"                      → concrete=""
+//	"FuncName returns sentinels via *pkg.Concrete: a, b, c"    → concrete="*pkg.Concrete"
+//
+// per-concrete で sentinel が無い場合は "(none)" が入るので空扱いにする。
+func parseDiagMessage(msg string) (funcName, concrete string, sentinels []string, err error) {
+	const marker = " returns sentinels"
 	idx := strings.Index(msg, marker)
 	if idx < 0 {
-		return "", nil, fmt.Errorf("parseMessage: marker not found in %q", msg)
+		return "", "", nil, fmt.Errorf("parseMessage: marker not found in %q", msg)
 	}
 	funcName = msg[:idx]
 	rest := msg[idx+len(marker):]
+	switch {
+	case strings.HasPrefix(rest, " via "):
+		rest = rest[len(" via "):]
+		colonIdx := strings.Index(rest, ": ")
+		if colonIdx < 0 {
+			return "", "", nil, fmt.Errorf("parseMessage: missing ':' after via in %q", msg)
+		}
+		concrete = rest[:colonIdx]
+		rest = rest[colonIdx+len(": "):]
+	case strings.HasPrefix(rest, ": "):
+		rest = rest[len(": "):]
+	default:
+		return "", "", nil, fmt.Errorf("parseMessage: unexpected format in %q", msg)
+	}
 	for _, s := range strings.Split(rest, ", ") {
 		s = strings.TrimSpace(s)
-		if s != "" {
-			sentinels = append(sentinels, s)
+		if s == "" || s == "(none)" {
+			continue
 		}
+		sentinels = append(sentinels, s)
 	}
-	return funcName, sentinels, nil
+	return funcName, concrete, sentinels, nil
 }

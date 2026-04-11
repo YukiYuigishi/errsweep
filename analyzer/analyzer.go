@@ -65,9 +65,10 @@ func run(pass *analysis.Pass) (interface{}, error) {
 
 		pos := funcPos(fn)
 
-		// 合算ライン: 具象が複数あると errors が混ざって誤解を招くので、
-		// その場合は per-concrete 行だけに任せて合算は出さない。
-		if len(sentinels) > 0 && len(breakdown.byConcrete) <= 1 {
+		// 合算ライン: 関数が返しうる sentinel の union。
+		// 多 concrete DI の場合でも Fact/LSP が union を拾えるように必ず emit する。
+		// どの concrete が何を返すかの内訳は下の per-concrete 行で補足する。
+		if len(sentinels) > 0 {
 			names := make([]string, len(sentinels))
 			for i, s := range sentinels {
 				names[i] = s.String()

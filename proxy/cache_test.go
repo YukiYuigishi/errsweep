@@ -118,6 +118,107 @@ func TestCache_MultipleSentinels(t *testing.T) {
 	}
 }
 
+func TestCache_MultiConcreteUnion(t *testing.T) {
+	// 多 concrete DI のケース: 合算ライン + per-concrete 内訳が同一 file:line に並ぶ。
+	// 上書きではなく union で merge され、ByConcrete に内訳が蓄積されること。
+	const multiConcreteJSON = `{
+		"pkg": {
+			"sentinelfind": [
+				{
+					"posn": "/src/tag.go:44:6",
+					"end":  "/src/tag.go:44:6",
+					"message": "CreateTag returns sentinels: repository.ErrInvalidValue, repository.ErrInvalidValueDummy"
+				},
+				{
+					"posn": "/src/tag.go:44:6",
+					"end":  "/src/tag.go:44:6",
+					"message": "CreateTag returns sentinels via *repository.TagRepository: repository.ErrInvalidValue"
+				},
+				{
+					"posn": "/src/tag.go:44:6",
+					"end":  "/src/tag.go:44:6",
+					"message": "CreateTag returns sentinels via *repository.TagRepositoryDummy: repository.ErrInvalidValueDummy"
+				}
+			]
+		}
+	}`
+	c, err := parseSentinelfindJSON([]byte(multiConcreteJSON))
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, ok := c.lookup("/src/tag.go", 44)
+	if !ok {
+		t.Fatal("entry not found for /src/tag.go:44")
+	}
+	if entry.FuncName != "CreateTag" {
+		t.Errorf("FuncName = %q, want %q", entry.FuncName, "CreateTag")
+	}
+	if len(entry.Sentinels) != 2 {
+		t.Errorf("want 2 union sentinels, got %d: %v", len(entry.Sentinels), entry.Sentinels)
+	}
+	if len(entry.ByConcrete) != 2 {
+		t.Errorf("want 2 concrete breakdowns, got %d: %v", len(entry.ByConcrete), entry.ByConcrete)
+	}
+	if got := entry.ByConcrete["*repository.TagRepository"]; len(got) != 1 || got[0] != "repository.ErrInvalidValue" {
+		t.Errorf("TagRepository breakdown = %v, want [repository.ErrInvalidValue]", got)
+	}
+	if got := entry.ByConcrete["*repository.TagRepositoryDummy"]; len(got) != 1 || got[0] != "repository.ErrInvalidValueDummy" {
+		t.Errorf("TagRepositoryDummy breakdown = %v, want [repository.ErrInvalidValueDummy]", got)
+	}
+
+	// per-concrete だけで合算ラインが来ない順序でも union されること。
+	const perConcreteOnlyJSON = `{
+		"pkg": {
+			"sentinelfind": [
+				{
+					"posn": "/src/get.go:35:6",
+					"end":  "/src/get.go:35:6",
+					"message": "GetTag returns sentinels via *repository.A: pkg.ErrA"
+				},
+				{
+					"posn": "/src/get.go:35:6",
+					"end":  "/src/get.go:35:6",
+					"message": "GetTag returns sentinels via *repository.B: pkg.ErrB"
+				}
+			]
+		}
+	}`
+	c, err = parseSentinelfindJSON([]byte(perConcreteOnlyJSON))
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, ok = c.lookup("/src/get.go", 35)
+	if !ok {
+		t.Fatal("entry not found for /src/get.go:35")
+	}
+	if len(entry.Sentinels) != 2 {
+		t.Errorf("want 2 union sentinels, got %d: %v", len(entry.Sentinels), entry.Sentinels)
+	}
+}
+
+func TestCache_MarkdownByConcrete(t *testing.T) {
+	entry := &CacheEntry{
+		FuncName:  "CreateTag",
+		Sentinels: []string{"repository.ErrInvalidValue", "repository.ErrInvalidValueDummy"},
+		ByConcrete: map[string][]string{
+			"*repository.TagRepository":      {"repository.ErrInvalidValue"},
+			"*repository.TagRepositoryDummy": {"repository.ErrInvalidValueDummy"},
+		},
+	}
+	md := entry.markdown()
+	for _, want := range []string{
+		"*repository.TagRepository",
+		"*repository.TagRepositoryDummy",
+		"repository.ErrInvalidValue",
+		"repository.ErrInvalidValueDummy",
+		"via `",
+	} {
+		if !contains(md, want) {
+			t.Errorf("markdown missing %q:\n%s", want, md)
+		}
+	}
+}
+
 func TestCache_MarkdownFormat(t *testing.T) {
 	entry := &CacheEntry{
 		FuncName:  "FindByID",
