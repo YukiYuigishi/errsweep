@@ -151,7 +151,8 @@ sentinelfind -json ./...
   "go.languageServerFlags": [
     "--gopls=gopls",
     "--sentinelfind=sentinelfind",
-    "--workspace=${workspaceFolder}"
+    "--workspace=${workspaceFolder}",
+    "--cache-file=${workspaceFolder}/.errsweep/cache.gob"
   ]
 }
 ```
@@ -195,5 +196,3 @@ vim.lsp.enable('gopls')
 ## OSS ガイドライン
 
 - [Contributing](CONTRIBUTING.md)
-- [Code of Conduct](CODE_OF_CONDUCT.md)
-- [Security Policy](SECURITY.md)

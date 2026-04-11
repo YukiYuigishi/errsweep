@@ -41,10 +41,12 @@ func main() {
 	workspace := flag.String("workspace", ".", "解析対象のワークスペースディレクトリ")
 	cacheTimeout := flag.Duration("cache-timeout", 60*time.Second, "sentinelfind キャッシュ構築のタイムアウト")
 	cachePattern := flag.String("cache-pattern", "./...", "sentinelfind の解析対象パッケージパターン")
+	cacheFile := flag.String("cache-file", "", "永続キャッシュファイルパス（未指定時: <workspace>/.errsweep/cache.gob）")
 	cacheRefreshMinInterval := flag.Duration("cache-refresh-min-interval", 2*time.Second, "キャッシュ再構築の最小間隔")
 	flag.Parse()
 	proxy.SetBuildCacheTimeout(*cacheTimeout)
 	proxy.SetBuildCachePattern(*cachePattern)
+	proxy.SetBuildCacheFilePath(*cacheFile)
 	workspaceRoot, err := filepath.Abs(*workspace)
 	if err != nil {
 		log.Fatalf("sentinel-lsp-proxy: resolve workspace path: %v", err)
