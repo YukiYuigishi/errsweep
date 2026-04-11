@@ -52,3 +52,8 @@ func TestAnalyzer_FuncVar(t *testing.T) {
 	testdata := analysistest.TestData()
 	analysistest.Run(t, testdata, analyzer.Analyzer, "funcvar")
 }
+
+func TestAnalyzer_IfaceImpl(t *testing.T) {
+	testdata := analysistest.TestData()
+	analysistest.Run(t, testdata, analyzer.Analyzer, "ifacecallee", "ifacecaller")
+}

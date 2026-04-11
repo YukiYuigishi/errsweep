@@ -27,6 +27,10 @@ func run(pass *analysis.Pass) (interface{}, error) {
 	// var f FuncType = ConcreteFunc パターンのグローバル関数変数マップを事前構築（DI 解決用）
 	globalFuncs := BuildGlobalFuncMap(ssaResult.SrcFuncs, ssaResult.Pkg)
 
+	// var _ Iface = (*Concrete)(nil) の compile-time assertion から
+	// インターフェース → 具象型のマップを構築（interface DI 解決用）
+	ifaceImpls := BuildInterfaceImpls(pass)
+
 	for _, fn := range ssaResult.SrcFuncs {
 		if fn.Blocks == nil {
 			continue
@@ -38,33 +42,65 @@ func run(pass *analysis.Pass) (interface{}, error) {
 			continue
 		}
 
-		sentinels := collectSentinels(fn, pass, globalFuncs)
+		sentinels, breakdown := collectSentinels(fn, pass, globalFuncs, ifaceImpls)
 
-		if len(sentinels) == 0 {
+		// どちらか片方でもあれば報告する（invoke 経由で具象ごとの
+		// 内訳だけが存在するケースでも必ず診断を出したい）
+		if len(sentinels) == 0 && len(breakdown.byConcrete) == 0 {
 			continue
 		}
 
-		// SentinelFact をエクスポート
-		fact := &SentinelFact{Errors: sentinels}
-		if obj := findFuncObject(pass, fn); obj != nil {
-			pass.ExportObjectFact(obj, fact)
+		// SentinelFact は union で保存（後方互換）
+		if len(sentinels) > 0 {
+			fact := &SentinelFact{Errors: sentinels}
+			if obj := findFuncObject(pass, fn); obj != nil {
+				pass.ExportObjectFact(obj, fact)
+			}
 		}
 
-		// 診断レポート
 		pos := funcPos(fn)
-		names := make([]string, len(sentinels))
-		for i, s := range sentinels {
-			names[i] = s.String()
+
+		// 合算ライン
+		if len(sentinels) > 0 {
+			names := make([]string, len(sentinels))
+			for i, s := range sentinels {
+				names[i] = s.String()
+			}
+			sort.Strings(names)
+			pass.Reportf(pos, "%s returns sentinels: %s", fn.Name(), strings.Join(names, ", "))
 		}
-		sort.Strings(names)
-		pass.Reportf(pos, "%s returns sentinels: %s", fn.Name(), strings.Join(names, ", "))
+
+		// 具象が複数ある場合は concrete ごとに報告
+		if len(breakdown.byConcrete) > 1 {
+			concretes := make([]string, 0, len(breakdown.byConcrete))
+			for c := range breakdown.byConcrete {
+				concretes = append(concretes, c)
+			}
+			sort.Strings(concretes)
+			for _, c := range concretes {
+				sens := breakdown.byConcrete[c]
+				if len(sens) == 0 {
+					pass.Reportf(pos, "%s returns sentinels via %s: (none)", fn.Name(), c)
+					continue
+				}
+				strs := make([]string, len(sens))
+				for i, s := range sens {
+					strs[i] = s.String()
+				}
+				sort.Strings(strs)
+				pass.Reportf(pos, "%s returns sentinels via %s: %s", fn.Name(), c, strings.Join(strs, ", "))
+			}
+		}
 	}
 
 	return nil, nil
 }
 
 // collectSentinels は関数内の全 Return 命令から Sentinel Error を収集する。
-func collectSentinels(fn *ssa.Function, pass *analysis.Pass, globalFuncs map[*ssa.Global]*ssa.Function) []SentinelInfo {
+// 戻り値:
+//  1. union の Sentinel 集合（Fact エクスポートと合算診断に使用）
+//  2. 関数直下の invoke 呼び出しにおける concrete ごとの Sentinel 内訳
+func collectSentinels(fn *ssa.Function, pass *analysis.Pass, globalFuncs map[*ssa.Global]*ssa.Function, ifaceImpls []ifaceImpl) ([]SentinelInfo, invokeBreakdown) {
 	ctx := &traceCtx{
 		visited:      make(map[ssa.Value]bool),
 		visitedFuncs: map[*ssa.Function]bool{fn: true}, // fn 自身を既訪問としてセット
@@ -75,6 +111,7 @@ func collectSentinels(fn *ssa.Function, pass *analysis.Pass, globalFuncs map[*ss
 			return pass.ImportObjectFact(obj, fact)
 		},
 		globalFuncs: globalFuncs,
+		ifaceImpls:  ifaceImpls,
 	}
 
 	var result []SentinelInfo
@@ -93,7 +130,20 @@ func collectSentinels(fn *ssa.Function, pass *analysis.Pass, globalFuncs map[*ss
 			}
 		}
 	}
-	return result
+
+	bd := collectInvokeBreakdown(fn, ctx, qualifierFor(pass.Pkg))
+	return result, bd
+}
+
+// qualifierFor は types.TypeString 用の quilfier を返す。
+// 解析対象パッケージ内の型は修飾なし、それ以外はパッケージ名を付ける。
+func qualifierFor(pkg *types.Package) types.Qualifier {
+	return func(p *types.Package) string {
+		if p == nil || p == pkg {
+			return ""
+		}
+		return p.Name()
+	}
 }
 
 // returnsError はシグネチャが error 型を返すかを判定する。

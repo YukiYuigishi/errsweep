@@ -12,11 +12,14 @@ const maxTraceDepth = 5
 // traceCtx は後方探索の実行コンテキスト。
 type traceCtx struct {
 	visited      map[ssa.Value]bool
-	visitedFuncs map[*ssa.Function]bool                // 関数間の循環呼び出し検出
+	visitedFuncs map[*ssa.Function]bool                 // 関数間の循環呼び出し検出
 	facts        func(types.Object, *SentinelFact) bool // ImportObjectFact
-	// globalFuncs は var f FuncType = Concrete の初期値マップ（DI 解決用）。
+	// globalFuncs は var f FuncType = Concrete の初期値マップ（関数変数 DI 解決用）。
 	// analyzer.go の run() で SrcFuncs と pkg.Members["init"] を走査して構築する。
 	globalFuncs map[*ssa.Global]*ssa.Function
+	// ifaceImpls は compile-time assertion から抽出したインターフェース実装マップ。
+	// interface 経由 DI の呼び出し先解決に使う。
+	ifaceImpls []ifaceImpl
 }
 
 // traceValue は SSA値 v から後方に探索し、到達しうる Sentinel Error を返す。
@@ -66,6 +69,10 @@ func traceValue(v ssa.Value, depth int, ctx *traceCtx) []SentinelInfo {
 		// 関数変数経由の呼び出し（DI パターン: var f FuncType = ConcreteFunc）
 		if callee := resolveIndirectCallee(x.Call, ctx); callee != nil {
 			return sentinelFromCallee(callee, depth+1, ctx)
+		}
+		// インターフェース経由の呼び出し（DI パターン: compile-time assertion 解決）
+		if x.Call.IsInvoke() {
+			return sentinelFromInvoke(x.Call, depth+1, ctx)
 		}
 		return nil
 
@@ -144,6 +151,8 @@ func sentinelFromCallee(callee *ssa.Function, depth int, ctx *traceCtx) []Sentin
 		visited:      make(map[ssa.Value]bool),
 		visitedFuncs: ctx.visitedFuncs,
 		facts:        ctx.facts,
+		globalFuncs:  ctx.globalFuncs,
+		ifaceImpls:   ctx.ifaceImpls,
 	}
 	var result []SentinelInfo
 	for _, block := range callee.Blocks {
@@ -183,8 +192,127 @@ func traceExtract(x *ssa.Extract, depth int, ctx *traceCtx) []SentinelInfo {
 		if callee := resolveIndirectCallee(tup.Call, ctx); callee != nil {
 			return sentinelFromCallee(callee, depth+1, ctx)
 		}
+		// インターフェース経由の呼び出し（DI パターン）
+		if tup.Call.IsInvoke() {
+			return sentinelFromInvoke(tup.Call, depth+1, ctx)
+		}
 	}
 	return nil
+}
+
+// sentinelFromInvoke はインターフェース呼び出し (IsInvoke) の Sentinel を解決する。
+// compile-time assertion (var _ I = (*T)(nil)) またはオートディスカバリで
+// 得た具象型を引き、対応するメソッドを ImportObjectFact で参照する。
+// 戻り値は全具象型の union。
+func sentinelFromInvoke(call ssa.CallCommon, depth int, ctx *traceCtx) []SentinelInfo {
+	if !call.IsInvoke() {
+		return nil
+	}
+	if depth > maxTraceDepth {
+		return nil
+	}
+	// call.Value はインターフェース値、その型がインターフェース型。
+	ifaceType := call.Value.Type()
+	method := call.Method
+	if method == nil {
+		return nil
+	}
+	concretes := lookupImpls(ctx.ifaceImpls, ifaceType)
+	if len(concretes) == 0 {
+		return nil
+	}
+	var result []SentinelInfo
+	for _, ct := range concretes {
+		result = appendUniq(result, sentinelsForConcreteMethod(ct, method.Name(), ctx))
+	}
+	return result
+}
+
+// sentinelsForConcreteMethod は具象型 ct の methodName メソッドから
+// Sentinel を解決する（known → Fact の順）。
+func sentinelsForConcreteMethod(ct types.Type, methodName string, ctx *traceCtx) []SentinelInfo {
+	if known, ok := knownMethodSentinels(ct, methodName); ok {
+		return known
+	}
+	fn := lookupMethod(ct, methodName)
+	if fn == nil {
+		return nil
+	}
+	if ctx.facts != nil {
+		var fact SentinelFact
+		if ctx.facts(fn, &fact) {
+			return fact.Errors
+		}
+	}
+	return nil
+}
+
+// invokeBreakdown は関数直下の invoke 呼び出しを具象型ごとに分解した結果。
+// 複数の invoke 呼び出し・複数具象にまたがる Sentinel を concrete 名で集約する。
+type invokeBreakdown struct {
+	// byConcrete のキーは types.TypeString(concrete, qualifier) の結果
+	// （例: "*repository.TagRepository"）。具象が 1 つも解決できなかった
+	// invoke は記録されない。
+	byConcrete map[string][]SentinelInfo
+}
+
+// collectInvokeBreakdown は fn のブロックを直接走査し、
+// IsInvoke な呼び出しについて concrete ごとの Sentinel 内訳を構築する。
+// ネストした callee 内の invoke は対象外（トップレベルの内訳のみ）。
+func collectInvokeBreakdown(fn *ssa.Function, ctx *traceCtx, qualifier types.Qualifier) invokeBreakdown {
+	bd := invokeBreakdown{byConcrete: map[string][]SentinelInfo{}}
+	if fn == nil || fn.Blocks == nil {
+		return bd
+	}
+	for _, block := range fn.Blocks {
+		for _, instr := range block.Instrs {
+			call, ok := instr.(*ssa.Call)
+			if !ok || !call.Call.IsInvoke() {
+				continue
+			}
+			method := call.Call.Method
+			if method == nil {
+				continue
+			}
+			ifaceType := call.Call.Value.Type()
+			concretes := lookupImpls(ctx.ifaceImpls, ifaceType)
+			for _, ct := range concretes {
+				name := types.TypeString(ct, qualifier)
+				sens := sentinelsForConcreteMethod(ct, method.Name(), ctx)
+				bd.byConcrete[name] = appendUniq(bd.byConcrete[name], sens)
+			}
+		}
+	}
+	return bd
+}
+
+// knownMethodSentinels は concreteType.methodName を known.go の形式キーで検索する。
+// "(*pkg.Type).Method" 形式。
+func knownMethodSentinels(concrete types.Type, methodName string) ([]SentinelInfo, bool) {
+	// RelString 互換の key を作る: "(*pkg.Type).Method" or "(pkg.Type).Method"
+	var key string
+	switch t := concrete.(type) {
+	case *types.Pointer:
+		named, ok := t.Elem().(*types.Named)
+		if !ok {
+			return nil, false
+		}
+		obj := named.Obj()
+		if obj.Pkg() == nil {
+			return nil, false
+		}
+		key = "(*" + obj.Pkg().Path() + "." + obj.Name() + ")." + methodName
+	case *types.Named:
+		obj := t.Obj()
+		if obj.Pkg() == nil {
+			return nil, false
+		}
+		key = "(" + obj.Pkg().Path() + "." + obj.Name() + ")." + methodName
+	default:
+		return nil, false
+	}
+	v, ok := knownErrorMap[key]
+	return v, ok
 }
 
 // resolveIndirectCallee は静的解決できない呼び出しに対して、
