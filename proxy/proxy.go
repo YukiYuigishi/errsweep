@@ -179,15 +179,30 @@ func appendSentinelToHover(raw []byte, entry *CacheEntry) ([]byte, error) {
 	} else {
 		// 文字列形式
 		var s string
-		if err := json.Unmarshal(contentsRaw, &s); err != nil {
-			return nil, fmt.Errorf("appendSentinelToHover: unmarshal string contents: %w", err)
+		if err := json.Unmarshal(contentsRaw, &s); err == nil {
+			s += "\n" + addition
+			newContents, err := json.Marshal(s)
+			if err != nil {
+				return nil, fmt.Errorf("appendSentinelToHover: marshal string contents: %w", err)
+			}
+			result["contents"] = newContents
+		} else {
+			// MarkedString[] 形式
+			var arr []json.RawMessage
+			if err := json.Unmarshal(contentsRaw, &arr); err != nil {
+				return nil, fmt.Errorf("appendSentinelToHover: unsupported contents shape: %w", err)
+			}
+			addRaw, err := json.Marshal(addition)
+			if err != nil {
+				return nil, fmt.Errorf("appendSentinelToHover: marshal marked-string addition: %w", err)
+			}
+			arr = append(arr, addRaw)
+			newContents, err := json.Marshal(arr)
+			if err != nil {
+				return nil, fmt.Errorf("appendSentinelToHover: marshal marked-string array: %w", err)
+			}
+			result["contents"] = newContents
 		}
-		s += "\n" + addition
-		newContents, err := json.Marshal(s)
-		if err != nil {
-			return nil, fmt.Errorf("appendSentinelToHover: marshal string contents: %w", err)
-		}
-		result["contents"] = newContents
 	}
 
 	newResult, err := json.Marshal(result)
@@ -222,15 +237,9 @@ func extractFuncNamesFromResult(result json.RawMessage) (string, string) {
 		return "", ""
 	}
 
-	var text string
-	var markup struct {
-		Kind  string `json:"kind"`
-		Value string `json:"value"`
-	}
-	if err := json.Unmarshal(r.Contents, &markup); err == nil && markup.Kind != "" {
-		text = markup.Value
-	} else {
-		_ = json.Unmarshal(r.Contents, &text)
+	text := hoverContentsText(r.Contents)
+	if text == "" {
+		return "", ""
 	}
 
 	m := funcNameRe.FindStringSubmatch(text)
@@ -244,6 +253,41 @@ func extractFuncNamesFromResult(result json.RawMessage) (string, string) {
 		ssaName = "(" + receiver + ")." + name
 	}
 	return ssaName, name
+}
+
+func hoverContentsText(contents json.RawMessage) string {
+	var text string
+	var markup struct {
+		Kind  string `json:"kind"`
+		Value string `json:"value"`
+	}
+	if err := json.Unmarshal(contents, &markup); err == nil && markup.Kind != "" {
+		return markup.Value
+	}
+	if err := json.Unmarshal(contents, &text); err == nil && text != "" {
+		return text
+	}
+	// MarkedString[] 互換: ["...", {"language":"go","value":"..."}]
+	var arr []json.RawMessage
+	if err := json.Unmarshal(contents, &arr); err != nil || len(arr) == 0 {
+		return ""
+	}
+	var lines []string
+	for _, raw := range arr {
+		var s string
+		if err := json.Unmarshal(raw, &s); err == nil && s != "" {
+			lines = append(lines, s)
+			continue
+		}
+		var marked struct {
+			Language string `json:"language"`
+			Value    string `json:"value"`
+		}
+		if err := json.Unmarshal(raw, &marked); err == nil && marked.Value != "" {
+			lines = append(lines, marked.Value)
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 // idKey は json.RawMessage の id を map のキーに使える文字列に変換する。

@@ -156,16 +156,20 @@ func (s *server) handleHover(params json.RawMessage) (interface{}, *rpcError) {
 	entry, ok := s.cache.Lookup(file, line)
 	if !ok {
 		// 定義行以外（呼び出し側）の hover は位置では引けないため、
-		// コンテキスト中のシンボル名でフォールバックする。
+		// コンテキスト中のシンボル名/hover contents から関数名でフォールバックする。
 		var pName struct {
 			Context struct {
 				Symbol struct {
 					Name string `json:"name"`
 				} `json:"symbol"`
 			} `json:"context"`
+			Contents json.RawMessage `json:"contents"`
 		}
 		if err := json.Unmarshal(params, &pName); err == nil {
 			name := pName.Context.Symbol.Name
+			if name == "" {
+				name = hoverFuncNameFromContents(pName.Contents)
+			}
 			if ssaName, simple := extractFuncNames(name); ssaName != "" {
 				entry, ok = s.cache.LookupByFuncName(ssaName)
 				if !ok && simple != "" {
@@ -189,6 +193,7 @@ func (s *server) handleHover(params json.RawMessage) (interface{}, *rpcError) {
 }
 
 var symbolNameRe = regexp.MustCompile(`(?:^|\.)(\w+)$`)
+var hoverFuncRe = regexp.MustCompile(`\bfunc\s+(?:\(\w+\s+(\*?(?:\w+\.)?\w+)\)\s+)?(?:\w+\.)?(\w+)\s*[(\[]`)
 
 // extractFuncNames はシンボル名から SSA スタイル名候補と単純名を返す。
 // 例: "(*Service).Create" -> "(*Service).Create", "Create"
@@ -210,6 +215,58 @@ func extractFuncNames(name string) (string, string) {
 		return "", m[1]
 	}
 	return "", name
+}
+
+func hoverFuncNameFromContents(contents json.RawMessage) string {
+	if len(contents) == 0 {
+		return ""
+	}
+	text := hoverContentsText(contents)
+	if text == "" {
+		return ""
+	}
+	m := hoverFuncRe.FindStringSubmatch(text)
+	if len(m) < 3 {
+		return ""
+	}
+	receiver, name := m[1], m[2]
+	if receiver != "" {
+		return "(" + receiver + ")." + name
+	}
+	return name
+}
+
+func hoverContentsText(contents json.RawMessage) string {
+	var text string
+	var markup struct {
+		Kind  string `json:"kind"`
+		Value string `json:"value"`
+	}
+	if err := json.Unmarshal(contents, &markup); err == nil && markup.Kind != "" {
+		return markup.Value
+	}
+	if err := json.Unmarshal(contents, &text); err == nil && text != "" {
+		return text
+	}
+	var arr []json.RawMessage
+	if err := json.Unmarshal(contents, &arr); err != nil || len(arr) == 0 {
+		return ""
+	}
+	lines := make([]string, 0, len(arr))
+	for _, raw := range arr {
+		if err := json.Unmarshal(raw, &text); err == nil && text != "" {
+			lines = append(lines, text)
+			continue
+		}
+		var marked struct {
+			Language string `json:"language"`
+			Value    string `json:"value"`
+		}
+		if err := json.Unmarshal(raw, &marked); err == nil && marked.Value != "" {
+			lines = append(lines, marked.Value)
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (s *server) reply(w io.Writer, id json.RawMessage, result interface{}, rpcErr *rpcError) error {

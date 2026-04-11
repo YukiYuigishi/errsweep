@@ -332,3 +332,49 @@ func TestProxy_HoverCallSite_MergeSameFuncName(t *testing.T) {
 		t.Fatalf("expected merged sentinel list for same function name, got: %s", got)
 	}
 }
+
+func TestProxy_HoverCallSite_MarkedStringArrayContents(t *testing.T) {
+	cache := newTestCache(map[cacheKey]*CacheEntry{
+		{file: "/workspace/pkg/b/find.go", line: 12}: {
+			FuncName:  "FindXXX",
+			Sentinels: []string{"b.ErrNotFound"},
+		},
+	})
+	p := NewProxy(cache)
+
+	reqBody := hoverRequest(40, "/workspace/pkg/a/usecase.go", 22, 10)
+	if err := p.trackRequest(reqBody); err != nil {
+		t.Fatal(err)
+	}
+
+	// gopls 互換の MarkedString[] contents
+	resp := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      40,
+		"result": map[string]interface{}{
+			"contents": []interface{}{
+				"package b",
+				map[string]interface{}{
+					"language": "go",
+					"value":    "func FindXXX(id string) (Item, error)",
+				},
+			},
+		},
+	}
+	respBody, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	if err := p.processServerMessage(respBody, &out); err != nil {
+		t.Fatal(err)
+	}
+	outMsg, err := readMessage(bufio.NewReader(&out))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(outMsg), "b.ErrNotFound") {
+		t.Fatalf("marked-string call-site hover should show sentinel info\ngot: %s", outMsg)
+	}
+}

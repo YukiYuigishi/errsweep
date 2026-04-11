@@ -221,6 +221,27 @@ func TestExtractFuncNames(t *testing.T) {
 	}
 }
 
+func TestHoverFuncNameFromContents(t *testing.T) {
+	cases := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{"markup", `{"kind":"markdown","value":"func repository.FindXXX(id string) error"}`, "FindXXX"},
+		{"marked-array", `["package b", {"language":"go","value":"func FindXXX(id string) error"}]`, "FindXXX"},
+		{"method", `{"kind":"markdown","value":"func (r *Repo) FindXXX(id string) error"}`, "(*Repo).FindXXX"},
+		{"none", `"not a func signature"`, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := hoverFuncNameFromContents(json.RawMessage(tc.raw))
+			if got != tc.want {
+				t.Fatalf("hoverFuncNameFromContents(%s) = %q, want %q", tc.raw, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestServer_UnknownMethod(t *testing.T) {
 	s := &server{cache: proxy.NewCache()}
 
