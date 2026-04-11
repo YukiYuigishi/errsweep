@@ -13,6 +13,7 @@ import (
 type CacheLoader func(sentinelfindPath, workspace string) (Cache, error)
 
 var buildCacheTimeout = 60 * time.Second
+var buildCachePattern = "./..."
 
 // SetBuildCacheTimeout は sentinelfind 実行時のタイムアウトを設定する。
 func SetBuildCacheTimeout(timeout time.Duration) {
@@ -22,13 +23,22 @@ func SetBuildCacheTimeout(timeout time.Duration) {
 	buildCacheTimeout = timeout
 }
 
+// SetBuildCachePattern は sentinelfind 実行時のパッケージパターンを設定する。
+func SetBuildCachePattern(pattern string) {
+	if pattern == "" {
+		return
+	}
+	buildCachePattern = pattern
+}
+
 // BuildCache は sentinelfind -json を実行して Cache を構築する。
 // exit code 3（診断あり）は正常終了として扱う。
 func BuildCache(sentinelfindPath, workspace string) (Cache, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), buildCacheTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, sentinelfindPath, "-json", "./...")
+	// #nosec G204 -- sentinelfindPath/pattern はローカル開発者が設定する解析対象コマンド引数。
+	cmd := exec.CommandContext(ctx, sentinelfindPath, buildCacheArgs()...)
 	cmd.Dir = workspace
 	out, err := cmd.Output()
 	if err != nil {
@@ -45,4 +55,8 @@ func BuildCache(sentinelfindPath, workspace string) (Cache, error) {
 		return NewCache(), nil
 	}
 	return ParseSentinelfindJSON(out)
+}
+
+func buildCacheArgs() []string {
+	return []string{"-json", buildCachePattern}
 }
