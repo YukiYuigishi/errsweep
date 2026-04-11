@@ -10,6 +10,7 @@ var knownErrorMap = map[string][]SentinelInfo{
 	"(*os.File).ReadAt": {{PkgPath: "io", Name: "EOF"}},
 
 	// bufio: デリミタ/バイト単位読み込みは EOF を返しうる
+	"(*bufio.Reader).Read":       {{PkgPath: "io", Name: "EOF"}},
 	"(*bufio.Reader).ReadString": {{PkgPath: "io", Name: "EOF"}},
 	"(*bufio.Reader).ReadBytes":  {{PkgPath: "io", Name: "EOF"}},
 	"(*bufio.Reader).ReadByte":   {{PkgPath: "io", Name: "EOF"}},
@@ -25,6 +26,8 @@ var knownErrorMap = map[string][]SentinelInfo{
 	// io: SectionReader は範囲末尾で EOF を返す
 	"(*io.SectionReader).Read":   {{PkgPath: "io", Name: "EOF"}},
 	"(*io.SectionReader).ReadAt": {{PkgPath: "io", Name: "EOF"}},
+	"(*io.LimitedReader).Read":   {{PkgPath: "io", Name: "EOF"}},
+	"(*io.PipeReader).Read":      {{PkgPath: "io", Name: "EOF"}},
 
 	// database/sql: 行が存在しない場合に ErrNoRows を返す
 	"(*database/sql.Row).Scan": {{PkgPath: "database/sql", Name: "ErrNoRows"}},

@@ -72,3 +72,8 @@ func TestAnalyzer_NonWrapFmtErrorf(t *testing.T) {
 	testdata := analysistest.TestData()
 	analysistest.Run(t, testdata, analyzer.Analyzer, "nonwrap")
 }
+
+func TestAnalyzer_IfaceExternal(t *testing.T) {
+	testdata := analysistest.TestData()
+	analysistest.Run(t, testdata, analyzer.Analyzer, "ifaceexternal", "ifacecallee", "ifacecallerext")
+}

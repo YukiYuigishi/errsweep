@@ -85,7 +85,7 @@ func implsFromAssertions(pass *analysis.Pass) []ifaceImpl {
 // （インターフェース型は除外）。メソッド集合がポインタレシーバを含む場合は
 // *T 形式で登録する。
 func implsFromAutoDiscovery(pass *analysis.Pass) []ifaceImpl {
-	ifaces := collectLocalInterfaces(pass.Pkg)
+	ifaces := collectInterfaces(pass.Pkg)
 	if len(ifaces) == 0 {
 		return nil
 	}
@@ -119,26 +119,36 @@ func implsFromAutoDiscovery(pass *analysis.Pass) []ifaceImpl {
 	return result
 }
 
-// collectLocalInterfaces は pkg.Scope() 直下の named interface 型を集める。
-func collectLocalInterfaces(pkg *types.Package) []types.Type {
+// collectInterfaces は pkg とその直接インポート先の Scope 直下にある
+// named interface 型を集める。
+func collectInterfaces(pkg *types.Package) []types.Type {
 	if pkg == nil {
 		return nil
 	}
 	var result []types.Type
-	scope := pkg.Scope()
-	for _, name := range scope.Names() {
-		tn, ok := scope.Lookup(name).(*types.TypeName)
-		if !ok {
-			continue
+	walk := func(p *types.Package) {
+		if p == nil {
+			return
 		}
-		named, ok := tn.Type().(*types.Named)
-		if !ok {
-			continue
+		scope := p.Scope()
+		for _, name := range scope.Names() {
+			tn, ok := scope.Lookup(name).(*types.TypeName)
+			if !ok {
+				continue
+			}
+			named, ok := tn.Type().(*types.Named)
+			if !ok {
+				continue
+			}
+			if _, ok := named.Underlying().(*types.Interface); !ok {
+				continue
+			}
+			result = append(result, named)
 		}
-		if _, ok := named.Underlying().(*types.Interface); !ok {
-			continue
-		}
-		result = append(result, named)
+	}
+	walk(pkg)
+	for _, imp := range pkg.Imports() {
+		walk(imp)
 	}
 	return result
 }
@@ -201,8 +211,17 @@ func dedupImpls(impls []ifaceImpl) []ifaceImpl {
 // lookupImpls は与えられたインターフェース型に対応する具象型一覧を返す。
 func lookupImpls(impls []ifaceImpl, iface types.Type) []types.Type {
 	var result []types.Type
+	var ifaceUnder *types.Interface
+	if iface != nil {
+		ifaceUnder, _ = iface.Underlying().(*types.Interface)
+	}
 	for _, i := range impls {
 		if types.Identical(i.iface, iface) {
+			result = append(result, i.concrete)
+			continue
+		}
+		implUnder, _ := i.iface.Underlying().(*types.Interface)
+		if ifaceUnder != nil && implUnder != nil && types.Identical(ifaceUnder, implUnder) {
 			result = append(result, i.concrete)
 		}
 	}

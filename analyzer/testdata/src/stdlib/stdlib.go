@@ -28,3 +28,16 @@ func ReadBufio(r *bufio.Reader) error { // want `ReadBufio returns sentinels: io
 	_, err := r.ReadString('\n')
 	return err
 }
+
+func ReadBuf(r *bufio.Reader) error { // want `ReadBuf returns sentinels: io\.EOF` ReadBuf:`SentinelFact\(io\.EOF\)`
+	buf := make([]byte, 8)
+	_, err := r.Read(buf)
+	return err
+}
+
+func ReadLimited(r io.Reader) error { // want `ReadLimited returns sentinels: io\.EOF` ReadLimited:`SentinelFact\(io\.EOF\)`
+	lr := &io.LimitedReader{R: r, N: 8}
+	buf := make([]byte, 16)
+	_, err := lr.Read(buf)
+	return err
+}
