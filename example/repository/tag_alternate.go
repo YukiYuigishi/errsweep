@@ -6,15 +6,16 @@ import (
 	"fmt"
 )
 
-type TagRepositoryDummy struct {
+// TagRepositoryLegacy は代替実装（複数 concrete の解析デモ用）。
+type TagRepositoryLegacy struct {
 	db *sql.DB
 }
 
-var ErrInvalidValueDummy = errors.New("error invalid value")
+var ErrInvalidValueLegacy = errors.New("legacy repository invalid value")
 
-func (t *TagRepositoryDummy) CreateTag(name string) (int64, error) {
+func (t *TagRepositoryLegacy) CreateTag(name string) (int64, error) {
 	if name == "" {
-		return 0, ErrInvalidValueDummy
+		return 0, ErrInvalidValueLegacy
 	}
 	res, err := t.db.Exec("INSERT INTO tags (name) VALUES (?)", name)
 	if err != nil {
@@ -24,7 +25,7 @@ func (t *TagRepositoryDummy) CreateTag(name string) (int64, error) {
 	return id, nil
 }
 
-func (t *TagRepositoryDummy) DeleteTag(id int) error {
+func (t *TagRepositoryLegacy) DeleteTag(id int) error {
 	if _, err := t.FindTagByID(id); err != nil {
 		return fmt.Errorf("DeleteTag: %w", err)
 	}
@@ -34,7 +35,7 @@ func (t *TagRepositoryDummy) DeleteTag(id int) error {
 	return nil
 }
 
-func (t *TagRepositoryDummy) FindTagByID(id int) (Tag, error) {
+func (t *TagRepositoryLegacy) FindTagByID(id int) (Tag, error) {
 	if id <= 0 {
 		return Tag{}, ErrNotFound
 	}
@@ -48,8 +49,8 @@ func (t *TagRepositoryDummy) FindTagByID(id int) (Tag, error) {
 	return tag, nil
 }
 
-func NewTagRepositoryDummy(db *sql.DB) *TagRepositoryDummy {
-	return &TagRepositoryDummy{
+func NewTagRepositoryLegacy(db *sql.DB) *TagRepositoryLegacy {
+	return &TagRepositoryLegacy{
 		db: db,
 	}
 }
