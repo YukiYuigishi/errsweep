@@ -22,8 +22,11 @@ import (
 	"flag"
 	"io"
 	"log"
+	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/YukiYuigishi/errsweep/proxy"
@@ -39,6 +42,10 @@ func main() {
 	cacheTimeout := flag.Duration("cache-timeout", 60*time.Second, "sentinelfind キャッシュ構築のタイムアウト")
 	flag.Parse()
 	proxy.SetBuildCacheTimeout(*cacheTimeout)
+	workspaceRoot, err := filepath.Abs(*workspace)
+	if err != nil {
+		log.Fatalf("sentinel-lsp-proxy: resolve workspace path: %v", err)
+	}
 
 	// flag.Args() には VS Code が渡してくる gopls サブコマンド・フラグ（"serve" など）が入る
 	goplsSubArgs := flag.Args()
@@ -99,7 +106,7 @@ func main() {
 			if err := p.TrackRequest(raw); err != nil {
 				log.Printf("sentinel-lsp-proxy: trackRequest: %v", err)
 			}
-			if shouldRefreshCache(raw) {
+			if shouldRefreshCache(raw, workspaceRoot) {
 				select {
 				case refreshCh <- struct{}{}:
 				default:
@@ -132,7 +139,7 @@ func main() {
 	}
 }
 
-func shouldRefreshCache(raw []byte) bool {
+func shouldRefreshCache(raw []byte, workspaceRoot string) bool {
 	var msg struct {
 		Method string          `json:"method"`
 		Params json.RawMessage `json:"params"`
@@ -141,13 +148,109 @@ func shouldRefreshCache(raw []byte) bool {
 		return false
 	}
 	switch msg.Method {
-	case "textDocument/didSave",
-		"workspace/didChangeWatchedFiles",
-		"workspace/didRenameFiles",
-		"workspace/didCreateFiles",
-		"workspace/didDeleteFiles":
-		return true
+	case "textDocument/didSave":
+		var params struct {
+			TextDocument struct {
+				URI string `json:"uri"`
+			} `json:"textDocument"`
+		}
+		if err := json.Unmarshal(msg.Params, &params); err != nil {
+			return false
+		}
+		return shouldRefreshByURI(params.TextDocument.URI, workspaceRoot)
+	case "workspace/didChangeWatchedFiles":
+		var params struct {
+			Changes []struct {
+				URI string `json:"uri"`
+			} `json:"changes"`
+		}
+		if err := json.Unmarshal(msg.Params, &params); err != nil {
+			return false
+		}
+		for _, ch := range params.Changes {
+			if shouldRefreshByURI(ch.URI, workspaceRoot) {
+				return true
+			}
+		}
+		return false
+	case "workspace/didRenameFiles":
+		var params struct {
+			Files []struct {
+				OldURI string `json:"oldUri"`
+				NewURI string `json:"newUri"`
+			} `json:"files"`
+		}
+		if err := json.Unmarshal(msg.Params, &params); err != nil {
+			return false
+		}
+		for _, f := range params.Files {
+			if shouldRefreshByURI(f.OldURI, workspaceRoot) || shouldRefreshByURI(f.NewURI, workspaceRoot) {
+				return true
+			}
+		}
+		return false
+	case "workspace/didCreateFiles", "workspace/didDeleteFiles":
+		var params struct {
+			Files []struct {
+				URI string `json:"uri"`
+			} `json:"files"`
+		}
+		if err := json.Unmarshal(msg.Params, &params); err != nil {
+			return false
+		}
+		for _, f := range params.Files {
+			if shouldRefreshByURI(f.URI, workspaceRoot) {
+				return true
+			}
+		}
+		return false
 	default:
 		return false
 	}
+}
+
+func shouldRefreshByURI(uri, workspaceRoot string) bool {
+	if uri == "" {
+		return false
+	}
+	path, ok := uriToWorkspacePath(uri, workspaceRoot)
+	if !ok {
+		return false
+	}
+	lower := strings.ToLower(path)
+	return strings.HasSuffix(lower, ".go") ||
+		strings.HasSuffix(lower, "/go.mod") ||
+		strings.HasSuffix(lower, "/go.sum") ||
+		strings.HasSuffix(lower, "/go.work")
+}
+
+func uriToWorkspacePath(uri, workspaceRoot string) (string, bool) {
+	const fileScheme = "file://"
+	if !strings.HasPrefix(uri, fileScheme) {
+		return "", false
+	}
+	u, err := url.Parse(uri)
+	if err != nil {
+		return "", false
+	}
+	p, err := url.PathUnescape(u.Path)
+	if err != nil {
+		return "", false
+	}
+	if p == "" {
+		return "", false
+	}
+	absPath := filepath.Clean(p)
+	root := filepath.Clean(workspaceRoot)
+	if root == "" {
+		return "", false
+	}
+	rel, err := filepath.Rel(root, absPath)
+	if err != nil {
+		return "", false
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	return filepath.ToSlash(absPath), true
 }
