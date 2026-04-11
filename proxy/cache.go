@@ -3,6 +3,7 @@ package proxy
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -82,6 +83,54 @@ func (c *Cache) addEntry(key cacheKey, entry *CacheEntry) {
 	c.byFuncName[entry.FuncName] = appendUniqueEntry(c.byFuncName[entry.FuncName], entry)
 	if simple := simpleFuncName(entry.FuncName); simple != "" && simple != entry.FuncName {
 		c.byFuncName[simple] = appendUniqueEntry(c.byFuncName[simple], entry)
+	}
+}
+
+// ReplacePackages は absPkgDirs の直下に属する既存エントリを削除し、
+// src のエントリをマージする。差分再解析の結果を既存キャッシュに反映するために使う。
+// absPkgDirs は sentinelfind が出力するファイルパスと同じ形式（絶対パス）である必要がある。
+// 「直下」判定なので親子関係にあるパッケージディレクトリ（例: ./proxy と ./proxy/sub）を
+// 同時に渡しても、それぞれ対応するエントリだけが置き換えられる。
+func (c *Cache) ReplacePackages(src Cache, absPkgDirs []string) {
+	if len(absPkgDirs) == 0 {
+		return
+	}
+	cleaned := make([]string, 0, len(absPkgDirs))
+	for _, d := range absPkgDirs {
+		if d == "" {
+			continue
+		}
+		cleaned = append(cleaned, filepath.Clean(d))
+	}
+	if len(cleaned) == 0 {
+		return
+	}
+	for key := range c.byLocation {
+		parent := filepath.Dir(filepath.Clean(key.file))
+		for _, dir := range cleaned {
+			if parent == dir {
+				delete(c.byLocation, key)
+				break
+			}
+		}
+	}
+	// byFuncName は entry ポインタを参照するスライス群なので、
+	// byLocation から除去された entry が残り続けないように再構築する。
+	c.byFuncName = make(map[string][]*CacheEntry)
+	for _, entry := range c.byLocation {
+		if entry == nil {
+			continue
+		}
+		c.byFuncName[entry.FuncName] = appendUniqueEntry(c.byFuncName[entry.FuncName], entry)
+		if simple := simpleFuncName(entry.FuncName); simple != "" && simple != entry.FuncName {
+			c.byFuncName[simple] = appendUniqueEntry(c.byFuncName[simple], entry)
+		}
+	}
+	for key, entry := range src.byLocation {
+		if entry == nil {
+			continue
+		}
+		c.addEntry(key, entry)
 	}
 }
 

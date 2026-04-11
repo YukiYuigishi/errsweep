@@ -27,10 +27,53 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/YukiYuigishi/errsweep/proxy"
 )
+
+// refreshRequest は LSP メッセージから抽出した再解析要求。
+// full=true のとき pkgDirs は無視され、フル再解析される。
+type refreshRequest struct {
+	full    bool
+	pkgDirs []string // 変更ファイルの親ディレクトリ（絶対パス）
+}
+
+// pendingRefresh は debounce 窓内に蓄積される再解析要求の集約状態。
+// 複数の didSave を 1 回の sentinelfind 呼び出しにまとめるために使う。
+type pendingRefresh struct {
+	mu      sync.Mutex
+	full    bool
+	pkgDirs map[string]bool
+}
+
+func (pr *pendingRefresh) add(req refreshRequest) {
+	pr.mu.Lock()
+	defer pr.mu.Unlock()
+	if req.full {
+		pr.full = true
+	}
+	if pr.pkgDirs == nil {
+		pr.pkgDirs = make(map[string]bool)
+	}
+	for _, d := range req.pkgDirs {
+		pr.pkgDirs[d] = true
+	}
+}
+
+func (pr *pendingRefresh) drain() (bool, []string) {
+	pr.mu.Lock()
+	defer pr.mu.Unlock()
+	full := pr.full
+	var pkgDirs []string
+	for d := range pr.pkgDirs {
+		pkgDirs = append(pkgDirs, d)
+	}
+	pr.full = false
+	pr.pkgDirs = nil
+	return full, pkgDirs
+}
 
 // cacheLoader はキャッシュ構築関数。テストで差し替え可能にするためパッケージ変数にしてある。
 var cacheLoader proxy.CacheLoader = proxy.BuildCache
@@ -64,29 +107,41 @@ func main() {
 	log.Printf("sentinel-lsp-proxy: loaded %d entries from sentinelfind in %s", cache.Len(), initialBuildElapsed)
 	p := proxy.NewProxy(cache)
 	refreshCh := make(chan struct{}, 1)
+	pending := &pendingRefresh{}
 
 	// 差分再解析: 保存/ファイル変更通知を受けたら debounce してキャッシュを再構築する。
+	// 変更が .go ファイルのみなら該当パッケージだけ partial で再解析し、既存キャッシュに
+	// マージする。go.mod/go.sum/go.work が変更されたら安全側に倒してフル再解析する。
 	go func() {
 		var lastRefreshAttempt time.Time
 		for range refreshCh {
 			time.Sleep(300 * time.Millisecond) // debounce
-			for len(refreshCh) > 0 {
-				<-refreshCh
-			}
 			now := time.Now()
 			if !shouldRunRefresh(now, lastRefreshAttempt, *cacheRefreshMinInterval) {
 				continue
 			}
 			lastRefreshAttempt = now
+			full, pkgDirs := pending.drain()
 			refreshStart := time.Now()
-			cache, err := cacheLoader(*sentinelfindPath, *workspace)
-			refreshElapsed := time.Since(refreshStart)
-			if err != nil {
-				log.Printf("sentinel-lsp-proxy: cache refresh failed after %s: %v", refreshElapsed, err)
+			if full || len(pkgDirs) == 0 {
+				newCache, err := cacheLoader(*sentinelfindPath, *workspace)
+				refreshElapsed := time.Since(refreshStart)
+				if err != nil {
+					log.Printf("sentinel-lsp-proxy: cache refresh failed after %s: %v", refreshElapsed, err)
+					continue
+				}
+				p.SetCache(newCache)
+				log.Printf("sentinel-lsp-proxy: cache refreshed full (%d entries, %s)", newCache.Len(), refreshElapsed)
 				continue
 			}
-			p.SetCache(cache)
-			log.Printf("sentinel-lsp-proxy: cache refreshed (%d entries, %s)", cache.Len(), refreshElapsed)
+			partial, err := proxy.BuildCachePartial(*sentinelfindPath, *workspace, pkgDirs)
+			refreshElapsed := time.Since(refreshStart)
+			if err != nil {
+				log.Printf("sentinel-lsp-proxy: cache refresh partial failed after %s (pkgs=%d): %v", refreshElapsed, len(pkgDirs), err)
+				continue
+			}
+			p.MergePartial(partial, pkgDirs)
+			log.Printf("sentinel-lsp-proxy: cache refreshed partial (%d entries, %s, pkgs=%d)", p.CacheLen(), refreshElapsed, len(pkgDirs))
 		}
 	}()
 
@@ -121,7 +176,8 @@ func main() {
 			if err := p.TrackRequest(raw); err != nil {
 				log.Printf("sentinel-lsp-proxy: trackRequest: %v", err)
 			}
-			if shouldRefreshCache(raw, workspaceRoot) {
+			if req, ok := parseRefreshRequest(raw, workspaceRoot); ok {
+				pending.add(req)
 				select {
 				case refreshCh <- struct{}{}:
 				default:
@@ -161,89 +217,110 @@ func shouldRunRefresh(now, last time.Time, minInterval time.Duration) bool {
 	return now.Sub(last) >= minInterval
 }
 
-func shouldRefreshCache(raw []byte, workspaceRoot string) bool {
+// parseRefreshRequest は LSP クライアントメッセージから再解析要求を抽出する。
+// 何も抽出できなければ (zero, false) を返す。
+// go.mod / go.sum / go.work の変更は依存ツリー全体に影響するので full=true にする。
+// .go のみが変更された場合は、そのファイルの親ディレクトリを pkgDirs に入れて
+// partial 再解析の対象にする。
+func parseRefreshRequest(raw []byte, workspaceRoot string) (refreshRequest, bool) {
 	var msg struct {
 		Method string          `json:"method"`
 		Params json.RawMessage `json:"params"`
 	}
 	if err := json.Unmarshal(raw, &msg); err != nil || msg.Method == "" {
-		return false
+		return refreshRequest{}, false
 	}
-	switch msg.Method {
+	uris := extractRefreshURIs(msg.Method, msg.Params)
+	return refreshRequestFromURIs(uris, workspaceRoot)
+}
+
+// extractRefreshURIs は再解析トリガーになりうる LSP 通知からファイル URI を取り出す。
+func extractRefreshURIs(method string, params json.RawMessage) []string {
+	switch method {
 	case "textDocument/didSave":
-		var params struct {
+		var p struct {
 			TextDocument struct {
 				URI string `json:"uri"`
 			} `json:"textDocument"`
 		}
-		if err := json.Unmarshal(msg.Params, &params); err != nil {
-			return false
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil
 		}
-		return shouldRefreshByURI(params.TextDocument.URI, workspaceRoot)
+		return []string{p.TextDocument.URI}
 	case "workspace/didChangeWatchedFiles":
-		var params struct {
+		var p struct {
 			Changes []struct {
 				URI string `json:"uri"`
 			} `json:"changes"`
 		}
-		if err := json.Unmarshal(msg.Params, &params); err != nil {
-			return false
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil
 		}
-		for _, ch := range params.Changes {
-			if shouldRefreshByURI(ch.URI, workspaceRoot) {
-				return true
-			}
+		out := make([]string, 0, len(p.Changes))
+		for _, ch := range p.Changes {
+			out = append(out, ch.URI)
 		}
-		return false
+		return out
 	case "workspace/didRenameFiles":
-		var params struct {
+		var p struct {
 			Files []struct {
 				OldURI string `json:"oldUri"`
 				NewURI string `json:"newUri"`
 			} `json:"files"`
 		}
-		if err := json.Unmarshal(msg.Params, &params); err != nil {
-			return false
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil
 		}
-		for _, f := range params.Files {
-			if shouldRefreshByURI(f.OldURI, workspaceRoot) || shouldRefreshByURI(f.NewURI, workspaceRoot) {
-				return true
-			}
+		out := make([]string, 0, 2*len(p.Files))
+		for _, f := range p.Files {
+			out = append(out, f.OldURI, f.NewURI)
 		}
-		return false
+		return out
 	case "workspace/didCreateFiles", "workspace/didDeleteFiles":
-		var params struct {
+		var p struct {
 			Files []struct {
 				URI string `json:"uri"`
 			} `json:"files"`
 		}
-		if err := json.Unmarshal(msg.Params, &params); err != nil {
-			return false
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil
 		}
-		for _, f := range params.Files {
-			if shouldRefreshByURI(f.URI, workspaceRoot) {
-				return true
-			}
+		out := make([]string, 0, len(p.Files))
+		for _, f := range p.Files {
+			out = append(out, f.URI)
 		}
-		return false
+		return out
 	default:
-		return false
+		return nil
 	}
 }
 
-func shouldRefreshByURI(uri, workspaceRoot string) bool {
-	if uri == "" {
-		return false
+func refreshRequestFromURIs(uris []string, workspaceRoot string) (refreshRequest, bool) {
+	var req refreshRequest
+	ok := false
+	seenDirs := make(map[string]bool)
+	for _, uri := range uris {
+		path, accepted := uriToWorkspacePath(uri, workspaceRoot)
+		if !accepted {
+			continue
+		}
+		lower := strings.ToLower(path)
+		switch {
+		case strings.HasSuffix(lower, "/go.mod"),
+			strings.HasSuffix(lower, "/go.sum"),
+			strings.HasSuffix(lower, "/go.work"):
+			req.full = true
+			ok = true
+		case strings.HasSuffix(lower, ".go"):
+			dir := filepath.Dir(path)
+			if !seenDirs[dir] {
+				seenDirs[dir] = true
+				req.pkgDirs = append(req.pkgDirs, dir)
+			}
+			ok = true
+		}
 	}
-	path, ok := uriToWorkspacePath(uri, workspaceRoot)
-	if !ok {
-		return false
-	}
-	lower := strings.ToLower(path)
-	return strings.HasSuffix(lower, ".go") ||
-		strings.HasSuffix(lower, "/go.mod") ||
-		strings.HasSuffix(lower, "/go.sum") ||
-		strings.HasSuffix(lower, "/go.work")
+	return req, ok
 }
 
 func uriToWorkspacePath(uri, workspaceRoot string) (string, bool) {

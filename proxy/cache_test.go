@@ -343,6 +343,90 @@ func TestCache_MarkdownFormat(t *testing.T) {
 	}
 }
 
+func TestCache_ReplacePackages(t *testing.T) {
+	t.Parallel()
+	c := NewCache()
+	c.addEntry(cacheKey{file: "/ws/pkg/a.go", line: 10}, &CacheEntry{
+		FuncName:  "A",
+		Sentinels: []string{"pkg.ErrA"},
+	})
+	c.addEntry(cacheKey{file: "/ws/pkg/b.go", line: 20}, &CacheEntry{
+		FuncName:  "B",
+		Sentinels: []string{"pkg.ErrB"},
+	})
+	c.addEntry(cacheKey{file: "/ws/other/x.go", line: 5}, &CacheEntry{
+		FuncName:  "X",
+		Sentinels: []string{"other.ErrX"},
+	})
+	// nested パッケージは独立の扱い
+	c.addEntry(cacheKey{file: "/ws/pkg/sub/s.go", line: 1}, &CacheEntry{
+		FuncName:  "S",
+		Sentinels: []string{"sub.ErrS"},
+	})
+
+	src := NewCache()
+	src.addEntry(cacheKey{file: "/ws/pkg/a.go", line: 10}, &CacheEntry{
+		FuncName:  "A",
+		Sentinels: []string{"pkg.ErrA2"}, // updated
+	})
+	// b.go は削除（sentinelfind の再解析で sentinel 無しになったケース想定）
+
+	c.ReplacePackages(src, []string{"/ws/pkg"})
+
+	// A は新値
+	if e, ok := c.Lookup("/ws/pkg/a.go", 10); !ok || len(e.Sentinels) != 1 || e.Sentinels[0] != "pkg.ErrA2" {
+		t.Fatalf("A not replaced: %+v ok=%v", e, ok)
+	}
+	// B は削除されているはず
+	if _, ok := c.Lookup("/ws/pkg/b.go", 20); ok {
+		t.Fatal("B should have been removed")
+	}
+	// other は影響を受けない
+	if _, ok := c.Lookup("/ws/other/x.go", 5); !ok {
+		t.Fatal("X should be preserved")
+	}
+	// nested package も影響を受けない
+	if _, ok := c.Lookup("/ws/pkg/sub/s.go", 1); !ok {
+		t.Fatal("S (nested package) should be preserved")
+	}
+	// byFuncName も整合していること: B は引けないはず
+	if _, ok := c.LookupByFuncName("B"); ok {
+		t.Fatal("byFuncName should not return removed entry B")
+	}
+	if _, ok := c.LookupByFuncName("A"); !ok {
+		t.Fatal("byFuncName should still return replaced entry A")
+	}
+}
+
+func TestPkgDirsToPatterns(t *testing.T) {
+	t.Parallel()
+	ws := "/ws"
+	cases := []struct {
+		name string
+		in   []string
+		want []string
+	}{
+		{"relative and abs mixed", []string{"/ws/proxy", "cmd/sentinel-lsp-proxy"}, []string{"./proxy", "./cmd/sentinel-lsp-proxy"}},
+		{"dedupes", []string{"/ws/proxy", "./proxy", "proxy"}, []string{"./proxy"}},
+		{"outside workspace skipped", []string{"/elsewhere/foo"}, nil},
+		{"root becomes ./...", []string{"/ws"}, []string{"./..."}},
+		{"empty slice yields empty", nil, nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := pkgDirsToPatterns(ws, tc.in)
+			if len(got) != len(tc.want) {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
+			for i, p := range got {
+				if p != tc.want[i] {
+					t.Fatalf("got %v, want %v", got, tc.want)
+				}
+			}
+		})
+	}
+}
+
 func contains(s, sub string) bool {
 	return len(s) >= len(sub) && (s == sub || len(s) > 0 && containsStr(s, sub))
 }

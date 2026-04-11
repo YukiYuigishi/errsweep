@@ -39,6 +39,21 @@ func (p *Proxy) SetCache(cache Cache) {
 	p.cacheMu.Unlock()
 }
 
+// MergePartial は差分再解析の結果 src を現キャッシュにマージする。
+// absPkgDirs の直下のエントリだけが置き換えられ、それ以外は保持される。
+func (p *Proxy) MergePartial(src Cache, absPkgDirs []string) {
+	p.cacheMu.Lock()
+	p.cache.ReplacePackages(src, absPkgDirs)
+	p.cacheMu.Unlock()
+}
+
+// CacheLen は現在のエントリ数を返す（ロギング・テスト用）。
+func (p *Proxy) CacheLen() int {
+	p.cacheMu.RLock()
+	defer p.cacheMu.RUnlock()
+	return p.cache.Len()
+}
+
 // TrackRequest は公開 API。
 func (p *Proxy) TrackRequest(raw []byte) error { return p.trackRequest(raw) }
 

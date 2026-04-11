@@ -109,6 +109,82 @@ func resolveCacheFilePath(workspace string) string {
 	return filepath.Join(workspace, ".errsweep", "cache.gob")
 }
 
+// BuildCachePartial は pkgDirs で指定されたパッケージだけを sentinelfind で再解析し、
+// 結果の小さな Cache を返す。既存キャッシュへのマージは呼び出し側の責任。
+// pkgDirs は絶対パス or workspace 相対パスのどちらでもよい。
+// 返される Cache のエントリのファイルパスは sentinelfind 出力そのまま（通常は絶対パス）。
+func BuildCachePartial(sentinelfindPath, workspace string, pkgDirs []string) (Cache, error) {
+	if len(pkgDirs) == 0 {
+		return NewCache(), nil
+	}
+	workspaceAbs, err := filepath.Abs(workspace)
+	if err != nil {
+		workspaceAbs = workspace
+	}
+	patterns := pkgDirsToPatterns(workspaceAbs, pkgDirs)
+	if len(patterns) == 0 {
+		return NewCache(), nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), buildCacheTimeout)
+	defer cancel()
+	args := append([]string{"-json"}, patterns...)
+	// #nosec G204 -- sentinelfindPath/pkgDirs はローカル開発者由来の解析対象指定。
+	cmd := exec.CommandContext(ctx, sentinelfindPath, args...)
+	cmd.Dir = workspaceAbs
+	out, err := cmd.Output()
+	if err != nil {
+		var ee *exec.ExitError
+		if !(errors.As(err, &ee) && ee.ExitCode() == 3) && len(out) == 0 {
+			return NewCache(), fmt.Errorf("BuildCachePartial: %w (patterns=%v)", err, patterns)
+		}
+	}
+	if len(out) == 0 {
+		return NewCache(), nil
+	}
+	cache, parseErr := ParseSentinelfindJSON(out)
+	if parseErr != nil {
+		return NewCache(), fmt.Errorf("BuildCachePartial: %w", parseErr)
+	}
+	return cache, nil
+}
+
+// pkgDirsToPatterns は pkgDirs を sentinelfind 向けの `./pkg` パターンに正規化する。
+// workspace 外のパスはスキップされる。
+func pkgDirsToPatterns(workspaceAbs string, pkgDirs []string) []string {
+	seen := make(map[string]bool, len(pkgDirs))
+	out := make([]string, 0, len(pkgDirs))
+	for _, d := range pkgDirs {
+		if d == "" {
+			continue
+		}
+		rel := d
+		if filepath.IsAbs(d) {
+			r, err := filepath.Rel(workspaceAbs, d)
+			if err != nil {
+				continue
+			}
+			rel = r
+		}
+		rel = filepath.ToSlash(filepath.Clean(rel))
+		if rel == ".." || strings.HasPrefix(rel, "../") {
+			continue
+		}
+		var pattern string
+		if rel == "." || rel == "" {
+			pattern = "./..."
+		} else {
+			pattern = "./" + rel
+		}
+		if seen[pattern] {
+			continue
+		}
+		seen[pattern] = true
+		out = append(out, pattern)
+	}
+	return out
+}
+
 func loadValidCache(path string, expected CacheMetadata) (Cache, error) {
 	cached, meta, err := LoadCacheFromFileWithMetadata(path)
 	if err != nil {
