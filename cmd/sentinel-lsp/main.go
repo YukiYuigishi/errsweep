@@ -19,6 +19,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -154,6 +155,28 @@ func (s *server) handleHover(params json.RawMessage) (interface{}, *rpcError) {
 
 	entry, ok := s.cache.Lookup(file, line)
 	if !ok {
+		// 定義行以外（呼び出し側）の hover は位置では引けないため、
+		// コンテキスト中のシンボル名でフォールバックする。
+		var pName struct {
+			Context struct {
+				Symbol struct {
+					Name string `json:"name"`
+				} `json:"symbol"`
+			} `json:"context"`
+		}
+		if err := json.Unmarshal(params, &pName); err == nil {
+			name := pName.Context.Symbol.Name
+			if ssaName, simple := extractFuncNames(name); ssaName != "" {
+				entry, ok = s.cache.LookupByFuncName(ssaName)
+				if !ok && simple != "" {
+					entry, ok = s.cache.LookupByFuncName(simple)
+				}
+			} else if simple != "" {
+				entry, ok = s.cache.LookupByFuncName(simple)
+			}
+		}
+	}
+	if !ok {
 		return nil, nil // null result = hover なし
 	}
 
@@ -163,6 +186,30 @@ func (s *server) handleHover(params json.RawMessage) (interface{}, *rpcError) {
 			"value": entry.Markdown(),
 		},
 	}, nil
+}
+
+var symbolNameRe = regexp.MustCompile(`(?:^|\.)(\w+)$`)
+
+// extractFuncNames はシンボル名から SSA スタイル名候補と単純名を返す。
+// 例: "(*Service).Create" -> "(*Service).Create", "Create"
+//
+//	"repository.Find"    -> "", "Find"
+func extractFuncNames(name string) (string, string) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", ""
+	}
+	if strings.Contains(name, ").") {
+		parts := strings.Split(name, ").")
+		if len(parts) == 2 && parts[1] != "" {
+			return name, parts[1]
+		}
+	}
+	m := symbolNameRe.FindStringSubmatch(name)
+	if len(m) == 2 {
+		return "", m[1]
+	}
+	return "", name
 }
 
 func (s *server) reply(w io.Writer, id json.RawMessage, result interface{}, rpcErr *rpcError) error {

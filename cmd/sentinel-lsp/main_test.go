@@ -153,6 +153,74 @@ func TestServer_HoverMiss(t *testing.T) {
 	}
 }
 
+func TestServer_HoverFallbackBySymbolName(t *testing.T) {
+	cache, err := proxy.ParseSentinelfindJSON([]byte(`{
+		"pkg": {
+			"sentinelfind": [{
+				"posn": "/src/repo.go:30:1",
+				"message": "(*Service).Create returns sentinels: pkg.ErrCreate"
+			}]
+		}
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &server{cache: cache}
+
+	hoverReq := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      5,
+		"method":  "textDocument/hover",
+		"params": map[string]interface{}{
+			"textDocument": map[string]interface{}{"uri": "file:///src/callsite.go"},
+			"position":     map[string]interface{}{"line": 1, "character": 0},
+			"context": map[string]interface{}{
+				"symbol": map[string]interface{}{"name": "(*Service).Create"},
+			},
+		},
+	}
+	reqBody, err := json.Marshal(hoverReq)
+	if err != nil {
+		t.Fatalf("marshal hover request: %v", err)
+	}
+
+	out := runOne(t, s, reqBody)
+	resp := readResponse(t, out)
+	if string(resp["result"]) == "null" {
+		t.Fatalf("expected fallback hover result, got null: %s", out.String())
+	}
+	var result struct {
+		Contents struct {
+			Value string `json:"value"`
+		} `json:"contents"`
+	}
+	if err := json.Unmarshal(resp["result"], &result); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(result.Contents.Value, "pkg.ErrCreate") {
+		t.Fatalf("expected pkg.ErrCreate in hover contents:\n%s", result.Contents.Value)
+	}
+}
+
+func TestExtractFuncNames(t *testing.T) {
+	cases := []struct {
+		in       string
+		wantSSA  string
+		wantName string
+	}{
+		{"(*Service).Create", "(*Service).Create", "Create"},
+		{"repository.Find", "", "Find"},
+		{"Find", "", "Find"},
+		{"", "", ""},
+	}
+	for _, tc := range cases {
+		ssa, name := extractFuncNames(tc.in)
+		if ssa != tc.wantSSA || name != tc.wantName {
+			t.Fatalf("extractFuncNames(%q) = (%q, %q), want (%q, %q)", tc.in, ssa, name, tc.wantSSA, tc.wantName)
+		}
+	}
+}
+
 func TestServer_UnknownMethod(t *testing.T) {
 	s := &server{cache: proxy.NewCache()}
 

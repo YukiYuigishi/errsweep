@@ -4,11 +4,18 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-echo "[pre-commit] golangci-lint run --fix ./..."
-golangci-lint run --fix ./...
+run_step() {
+  echo "[pre-commit] $*"
+  "$@"
+}
 
-echo "[pre-commit] go test ./..."
-go test ./...
+run_step golangci-lint run --fix ./...
 
-echo "[pre-commit] make test-neovim-compat"
-make test-neovim-compat
+# AI 生成コードの品質担保として test-all を必須実行する。
+run_step make test-all
+
+if ! git diff --quiet -- .; then
+  echo "[pre-commit] working tree changed by checks. stage updates and commit again."
+  git --no-pager status --short
+  exit 1
+fi

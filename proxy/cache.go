@@ -125,6 +125,11 @@ func (c Cache) Lookup(file string, line int) (*CacheEntry, bool) {
 	return c.lookup(file, line)
 }
 
+// LookupByFuncName は関数名（単純名/SSAスタイル名）で CacheEntry を返す。
+func (c Cache) LookupByFuncName(name string) (*CacheEntry, bool) {
+	return c.lookupByFuncName(name)
+}
+
 // lookupByFuncName は関数名で CacheEntry を返す。
 // 呼び出し側でのホバー時のフォールバックとして使う。
 func (c Cache) lookupByFuncName(name string) (*CacheEntry, bool) {

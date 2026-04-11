@@ -126,10 +126,13 @@ sentinelfind -json ./...
 }
 ```
 
+> `sentinel-lsp` 単体を VS Code の `gopls` 代替として使う構成は実用上非推奨です。  
+> Go 拡張は `gopls` の機能セット前提で動作するため、現状は `sentinel-lsp-proxy` 経由を前提にしてください。
+
 ### Neovim（proxy）
 
 ```lua
-require('lspconfig').gopls.setup({
+vim.lsp.config('gopls', {
   cmd = {
     vim.fn.exepath('sentinel-lsp-proxy'),
     '--gopls=' .. vim.fn.exepath('gopls'),
@@ -137,6 +140,20 @@ require('lspconfig').gopls.setup({
     '--workspace=' .. vim.fn.getcwd(),
   },
 })
+vim.lsp.enable('gopls')
+```
+
+### Neovim（proxy を使わない: sentinel-lsp 単体）
+
+```lua
+vim.lsp.config('gopls', {
+  cmd = {
+    vim.fn.exepath('sentinel-lsp'),
+    '--sentinelfind=' .. vim.fn.exepath('sentinelfind'),
+    '--workspace=' .. vim.fn.getcwd(),
+  },
+})
+vim.lsp.enable('gopls')
 ```
 
 ## 既知の制限（現行）
