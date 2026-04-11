@@ -57,3 +57,8 @@ func TestAnalyzer_IfaceImpl(t *testing.T) {
 	testdata := analysistest.TestData()
 	analysistest.Run(t, testdata, analyzer.Analyzer, "ifacecallee", "ifacecaller")
 }
+
+func TestAnalyzer_CustomType(t *testing.T) {
+	testdata := analysistest.TestData()
+	analysistest.Run(t, testdata, analyzer.Analyzer, "customtype")
+}

@@ -50,6 +50,11 @@ func run(pass *analysis.Pass) (interface{}, error) {
 			continue
 		}
 
+		// 表示・Fact 双方で順序を安定させるためソート
+		sort.Slice(sentinels, func(i, j int) bool {
+			return sentinels[i].String() < sentinels[j].String()
+		})
+
 		// SentinelFact は union で保存（後方互換）
 		if len(sentinels) > 0 {
 			fact := &SentinelFact{Errors: sentinels}
@@ -66,7 +71,6 @@ func run(pass *analysis.Pass) (interface{}, error) {
 			for i, s := range sentinels {
 				names[i] = s.String()
 			}
-			sort.Strings(names)
 			pass.Reportf(pos, "%s returns sentinels: %s", fn.Name(), strings.Join(names, ", "))
 		}
 

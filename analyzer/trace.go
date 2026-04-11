@@ -45,7 +45,16 @@ func traceValue(v ssa.Value, depth int, ctx *traceCtx) []SentinelInfo {
 		return traceValue(x.X, depth+1, ctx)
 
 	case *ssa.MakeInterface:
-		return traceValue(x.X, depth+1, ctx)
+		// まず既存の探索（Global 変数や wrap 越しの Sentinel を優先）
+		if inner := traceValue(x.X, depth+1, ctx); len(inner) > 0 {
+			return inner
+		}
+		// カスタムエラー型としてそのまま Sentinel 化
+		// 例: return &NotFoundError{ID: id}
+		if info, ok := customErrorType(x.X.Type()); ok {
+			return []SentinelInfo{*info}
+		}
+		return nil
 
 	case *ssa.ChangeInterface:
 		return traceValue(x.X, depth+1, ctx)
@@ -106,7 +115,56 @@ func sentinelFromGlobal(g *ssa.Global) []SentinelInfo {
 		return nil
 	}
 	pkgPath := g.Package().Pkg.Path()
-	return []SentinelInfo{{PkgPath: pkgPath, Name: name}}
+	return []SentinelInfo{{PkgPath: pkgPath, Name: name, Kind: KindVar}}
+}
+
+// customErrorType は t が「ユーザー定義のエラー型」かを判定する。
+// 対象とする条件:
+//   - named 型 or *named
+//   - error interface を実装
+//   - エクスポートされた型名
+//   - errors / fmt パッケージの primitive 型（errorString, wrapError 等）でない
+//
+// これらを満たす場合、型名ベースの Sentinel として返す。
+func customErrorType(t types.Type) (*SentinelInfo, bool) {
+	pointer := false
+	elem := t
+	if ptr, ok := t.(*types.Pointer); ok {
+		pointer = true
+		elem = ptr.Elem()
+	}
+	named, ok := elem.(*types.Named)
+	if !ok {
+		return nil, false
+	}
+	obj := named.Obj()
+	if obj == nil || obj.Pkg() == nil {
+		return nil, false
+	}
+	if !obj.Exported() {
+		return nil, false
+	}
+	pkgPath := obj.Pkg().Path()
+	if pkgPath == "errors" || pkgPath == "fmt" {
+		return nil, false
+	}
+	errorIface, ok := types.Universe.Lookup("error").Type().Underlying().(*types.Interface)
+	if !ok {
+		return nil, false
+	}
+	check := types.Type(elem)
+	if pointer {
+		check = types.NewPointer(elem)
+	}
+	if !types.Implements(check, errorIface) {
+		return nil, false
+	}
+	return &SentinelInfo{
+		PkgPath: pkgPath,
+		Name:    obj.Name(),
+		Kind:    KindType,
+		Pointer: pointer,
+	}, true
 }
 
 // sentinelFromCallee は呼び出し先関数の Sentinel を返す。
