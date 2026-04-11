@@ -11,7 +11,15 @@ import (
 // テストや将来の実装で差し替えられるよう DI 可能な形にしてある。
 type CacheLoader func(sentinelfindPath, workspace string) (Cache, error)
 
-const buildCacheTimeout = 15 * time.Second
+var buildCacheTimeout = 60 * time.Second
+
+// SetBuildCacheTimeout は sentinelfind 実行時のタイムアウトを設定する。
+func SetBuildCacheTimeout(timeout time.Duration) {
+	if timeout <= 0 {
+		return
+	}
+	buildCacheTimeout = timeout
+}
 
 // BuildCache は sentinelfind -json を実行して Cache を構築する。
 // exit code 3（診断あり）は正常終了として扱う。

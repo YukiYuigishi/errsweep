@@ -22,6 +22,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"time"
 
 	"github.com/YukiYuigishi/errsweep/proxy"
 )
@@ -33,7 +34,9 @@ func main() {
 	goplsPath := flag.String("gopls", "gopls", "gopls バイナリのパス")
 	sentinelfindPath := flag.String("sentinelfind", "sentinelfind", "sentinelfind バイナリのパス")
 	workspace := flag.String("workspace", ".", "解析対象のワークスペースディレクトリ")
+	cacheTimeout := flag.Duration("cache-timeout", 60*time.Second, "sentinelfind キャッシュ構築のタイムアウト")
 	flag.Parse()
+	proxy.SetBuildCacheTimeout(*cacheTimeout)
 
 	// flag.Args() には VS Code が渡してくる gopls サブコマンド・フラグ（"serve" など）が入る
 	goplsSubArgs := flag.Args()
