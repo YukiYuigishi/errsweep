@@ -82,3 +82,8 @@ func TestAnalyzer_IfaceParamFlow(t *testing.T) {
 	testdata := analysistest.TestData()
 	analysistest.Run(t, testdata, analyzer.Analyzer, "ifaceparam")
 }
+
+func TestAnalyzer_RealWorld(t *testing.T) {
+	testdata := analysistest.TestData()
+	analysistest.Run(t, testdata, analyzer.Analyzer, "realworld")
+}
