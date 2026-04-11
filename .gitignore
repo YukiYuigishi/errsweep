@@ -2,3 +2,6 @@
 /sentinel-lsp-proxy
 /sentinel-lsp
 /tmp/
+/.ci-cache/
+/.codex/
+/.vscode/

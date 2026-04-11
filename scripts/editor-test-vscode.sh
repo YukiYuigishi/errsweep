@@ -5,7 +5,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMPDIR="$(mktemp -d)"
 
 USER_DIR="$TMPDIR/user"
-EXT_DIR="$TMPDIR/extensions"
+EXT_DIR_DEFAULT="$TMPDIR/extensions"
+EXT_DIR="${EXT_DIR:-$EXT_DIR_DEFAULT}"
 LOG_STD="$TMPDIR/code-stdout.log"
 SETTINGS_DIR="$USER_DIR/User"
 SETTINGS_JSON="$SETTINGS_DIR/settings.json"
@@ -64,7 +65,9 @@ cat > "$SETTINGS_JSON" <<EOF
 }
 EOF
 
-code --install-extension golang.go --extensions-dir "$EXT_DIR" --force >/dev/null 2>&1 || true
+if ! code --list-extensions --extensions-dir "$EXT_DIR" | grep -qx "golang.go"; then
+  code --install-extension golang.go --extensions-dir "$EXT_DIR" --force >/dev/null 2>&1 || true
+fi
 
 code \
   --user-data-dir "$USER_DIR" \
