@@ -3,7 +3,7 @@ PROXY_BIN  := sentinel-lsp-proxy
 LSP_BIN    := sentinel-lsp
 GOBIN      := $(shell go env GOPATH)/bin
 
-.PHONY: all build install dev-setup dev-tools check-tools test test-v test-analyzer test-flags test-neovim-compat test-editor-nvim test-editor-vscode test-editor lint clean demo demo-example
+.PHONY: all build install dev-setup dev-tools check-tools test test-all test-v test-analyzer test-flags test-neovim-compat test-editor-nvim test-editor-vscode test-editor lint clean demo demo-example
 
 all: build
 
@@ -41,6 +41,8 @@ dev-setup: dev-tools check-tools build
 
 test:
 	go test ./...
+
+test-all: check-tools test test-editor
 
 test-v:
 	go test ./analyzer/... -v

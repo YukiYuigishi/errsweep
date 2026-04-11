@@ -465,7 +465,16 @@ make test-editor-vscode
 make test-editor
 ```
 
+`test-editor-vscode` は隔離 `--user-data-dir` / `--extensions-dir` に加えて、workspace trust を無効化して実行します（`--disable-workspace-trust`）。
+テスト終了時には、この隔離 user-data-dir を使って起動した VS Code プロセスを自動停止します。
+
 `test-editor-nvim` はユーザーの既存設定を使わず、毎回一時ディレクトリの最小構成（`-u NONE --noplugin` + 分離 XDG パス）で実行します。
+
+全テスト（`go test ./...` + Neovim E2E + VS Code E2E）をまとめて実行する場合：
+
+```bash
+make test-all
+```
 
 ## テストフィクスチャの追加方法
 
