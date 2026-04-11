@@ -118,6 +118,54 @@ func TestCache_MultipleSentinels(t *testing.T) {
 	}
 }
 
+func TestCache_ParseJSON_WrappedDiagnosticsObject(t *testing.T) {
+	const wrappedJSON = `{
+		"pkg": {
+			"sentinelfind": {
+				"diagnostics": [
+					{
+						"posn": "/src/foo.go:5:6",
+						"message": "Fetch returns sentinels: pkg.ErrA"
+					}
+				]
+			}
+		}
+	}`
+	c, err := parseSentinelfindJSON([]byte(wrappedJSON))
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, ok := c.lookup("/src/foo.go", 5)
+	if !ok {
+		t.Fatal("entry not found")
+	}
+	if len(entry.Sentinels) != 1 || entry.Sentinels[0] != "pkg.ErrA" {
+		t.Errorf("unexpected sentinels: %v", entry.Sentinels)
+	}
+}
+
+func TestCache_ParseJSON_SingleDiagnosticObject(t *testing.T) {
+	const singleJSON = `{
+		"pkg": {
+			"sentinelfind": {
+				"posn": "/src/bar.go:7:2",
+				"message": "Run returns sentinels: pkg.ErrB"
+			}
+		}
+	}`
+	c, err := parseSentinelfindJSON([]byte(singleJSON))
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, ok := c.lookup("/src/bar.go", 7)
+	if !ok {
+		t.Fatal("entry not found")
+	}
+	if len(entry.Sentinels) != 1 || entry.Sentinels[0] != "pkg.ErrB" {
+		t.Errorf("unexpected sentinels: %v", entry.Sentinels)
+	}
+}
+
 func TestCache_MultiConcreteUnion(t *testing.T) {
 	// 多 concrete DI のケース: 合算ライン + per-concrete 内訳が同一 file:line に並ぶ。
 	// 上書きではなく union で merge され、ByConcrete に内訳が蓄積されること。

@@ -120,9 +120,7 @@ func (c Cache) lookupByFuncName(name string) (*CacheEntry, bool) {
 	return entry, ok
 }
 
-// sentinelfindOutput は `sentinelfind -json` の出力形式。
-// map[pkgPath]map["sentinelfind"][]diagnostic
-type sentinelfindOutput map[string]map[string][]struct {
+type diagnostic struct {
 	Posn    string `json:"posn"`
 	Message string `json:"message"`
 }
@@ -134,14 +132,18 @@ func ParseSentinelfindJSON(data []byte) (Cache, error) { return parseSentinelfin
 // 同一 file:line に複数診断がある場合（例: 合算ライン + per-concrete 内訳ライン）は
 // エントリを上書きせず、sentinels を union し ByConcrete に内訳を蓄積する。
 func parseSentinelfindJSON(data []byte) (Cache, error) {
-	var out sentinelfindOutput
+	var out map[string]map[string]json.RawMessage
 	if err := json.Unmarshal(data, &out); err != nil {
 		return NewCache(), fmt.Errorf("parseSentinelfindJSON: %w", err)
 	}
 
 	cache := NewCache()
 	for _, checks := range out {
-		for _, diags := range checks {
+		for _, raw := range checks {
+			diags, err := decodeDiagnostics(raw)
+			if err != nil {
+				continue
+			}
 			for _, d := range diags {
 				file, line, err := parsePosn(d.Posn)
 				if err != nil {
@@ -168,6 +170,37 @@ func parseSentinelfindJSON(data []byte) (Cache, error) {
 		}
 	}
 	return cache, nil
+}
+
+// decodeDiagnostics は analyzer 出力を diagnostics 配列へ正規化する。
+// 互換のため、以下の形を受け付ける:
+// - []diagnostic
+// - diagnostic (単体)
+// - {"diagnostics": []diagnostic} / {"diagnostics": diagnostic}
+func decodeDiagnostics(raw json.RawMessage) ([]diagnostic, error) {
+	var arr []diagnostic
+	if err := json.Unmarshal(raw, &arr); err == nil {
+		return arr, nil
+	}
+
+	var one diagnostic
+	if err := json.Unmarshal(raw, &one); err == nil && one.Posn != "" {
+		return []diagnostic{one}, nil
+	}
+
+	var wrapped struct {
+		Diagnostics json.RawMessage `json:"diagnostics"`
+	}
+	if err := json.Unmarshal(raw, &wrapped); err == nil && len(wrapped.Diagnostics) > 0 {
+		if err := json.Unmarshal(wrapped.Diagnostics, &arr); err == nil {
+			return arr, nil
+		}
+		if err := json.Unmarshal(wrapped.Diagnostics, &one); err == nil && one.Posn != "" {
+			return []diagnostic{one}, nil
+		}
+	}
+
+	return nil, fmt.Errorf("decodeDiagnostics: unsupported shape")
 }
 
 // parsePosn は "path/to/file.go:8:6" を (file, line, nil) に分解する。
