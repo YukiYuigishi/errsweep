@@ -37,14 +37,12 @@ func main() {
 
 	// flag.Args() には VS Code が渡してくる gopls サブコマンド・フラグ（"serve" など）が入る
 	goplsSubArgs := flag.Args()
-
 	cache, err := cacheLoader(*sentinelfindPath, *workspace)
 	if err != nil {
 		log.Printf("sentinel-lsp-proxy: cache build failed (continuing without sentinels): %v", err)
 		cache = proxy.NewCache()
 	}
 	log.Printf("sentinel-lsp-proxy: loaded %d entries from sentinelfind", cache.Len())
-
 	p := proxy.NewProxy(cache)
 
 	// gopls を子プロセスとして起動
@@ -103,4 +101,3 @@ func main() {
 		log.Printf("sentinel-lsp-proxy: gopls exited: %v", err)
 	}
 }
-

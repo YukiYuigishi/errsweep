@@ -18,9 +18,10 @@ type pendingRequest struct {
 
 // Proxy は LSP メッセージをインターセプトして Sentinel 情報を付加する。
 type Proxy struct {
-	cache    Cache
-	mu       sync.Mutex
-	pending  map[string]pendingRequest // JSON-RPC id (文字列化) → リクエスト情報
+	cacheMu sync.RWMutex
+	cache   Cache
+	mu      sync.Mutex
+	pending map[string]pendingRequest // JSON-RPC id (文字列化) → リクエスト情報
 }
 
 // NewProxy は新しい Proxy を生成する。
@@ -29,6 +30,13 @@ func NewProxy(cache Cache) *Proxy {
 		cache:   cache,
 		pending: make(map[string]pendingRequest),
 	}
+}
+
+// SetCache はキャッシュを差し替える。
+func (p *Proxy) SetCache(cache Cache) {
+	p.cacheMu.Lock()
+	p.cache = cache
+	p.cacheMu.Unlock()
 }
 
 // TrackRequest は公開 API。
@@ -96,7 +104,9 @@ func (p *Proxy) processServerMessage(raw []byte, w io.Writer) error {
 	}
 
 	// 1. 定義行による検索（定義ファイルでのホバー）
+	p.cacheMu.RLock()
 	entry, hit := p.cache.lookup(req.file, req.line)
+	p.cacheMu.RUnlock()
 
 	// 2. 関数名による検索（呼び出し側でのホバー）
 	// gopls のホバーレスポンスには関数シグネチャが含まれるため、
@@ -106,10 +116,14 @@ func (p *Proxy) processServerMessage(raw []byte, w io.Writer) error {
 	if !hit {
 		if ssaName, simpleName := extractFuncNamesFromResult(msg.Result); simpleName != "" {
 			if ssaName != "" {
+				p.cacheMu.RLock()
 				entry, hit = p.cache.lookupByFuncName(ssaName)
+				p.cacheMu.RUnlock()
 			}
 			if !hit {
+				p.cacheMu.RLock()
 				entry, hit = p.cache.lookupByFuncName(simpleName)
+				p.cacheMu.RUnlock()
 			}
 		}
 	}
