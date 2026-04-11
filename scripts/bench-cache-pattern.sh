@@ -10,6 +10,7 @@ RUNS="${CACHE_BENCH_RUNS:-1}"
 PRESET="${CACHE_BENCH_PRESET:-}"
 MAX_AVG_REAL="${CACHE_BENCH_MAX_AVG_REAL:-}"
 MAX_AVG_EXIT="${CACHE_BENCH_MAX_AVG_EXIT:-}"
+FORMAT="${CACHE_BENCH_FORMAT:-plain}"
 
 if [[ ! -x "$BIN_PATH" ]]; then
   echo "error: sentinelfind binary not found or not executable: $BIN_PATH" >&2
@@ -36,17 +37,21 @@ else
   esac
 fi
 
-echo "# cache-pattern benchmark"
-echo
-echo "- repo: \`$REPO_PATH\`"
-echo "- bin: \`$BIN_PATH\`"
-echo "- runs per pattern: \`$RUNS\`"
+echo "cache-pattern benchmark"
+echo "repo: $REPO_PATH"
+echo "bin: $BIN_PATH"
+echo "runs per pattern: $RUNS"
 if [[ -n "$PRESET" ]]; then
-  echo "- preset: \`$PRESET\`"
+  echo "preset: $PRESET"
 fi
 echo
-echo "| pattern | run | exit | real(s) | user(s) | sys(s) | output(bytes) |"
-echo "|---|---:|---:|---:|---:|---:|---:|"
+if [[ "$FORMAT" == "markdown" ]]; then
+  echo "| pattern | run | exit | real(s) | user(s) | sys(s) | output(bytes) |"
+  echo "|---|---:|---:|---:|---:|---:|---:|"
+else
+  printf "%-22s %4s %4s %8s %8s %8s %14s\n" "pattern" "run" "exit" "real(s)" "user(s)" "sys(s)" "output(bytes)"
+  printf "%-22s %4s %4s %8s %8s %8s %14s\n" "----------------------" "----" "----" "--------" "--------" "--------" "--------------"
+fi
 
 sum_real=0
 sum_user=0
@@ -74,7 +79,11 @@ for pattern in "${patterns[@]}"; do
     sys_s="$(awk '$1=="sys"{print $2}' "$time_log")"
     out_bytes="$(wc -c < "$out_json" | tr -d ' ')"
 
-    echo "| \`$pattern\` | $run_idx | $exit_code | $real_s | $user_s | $sys_s | $out_bytes |"
+    if [[ "$FORMAT" == "markdown" ]]; then
+      echo "| \`$pattern\` | $run_idx | $exit_code | $real_s | $user_s | $sys_s | $out_bytes |"
+    else
+      printf "%-22s %4s %4s %8s %8s %8s %14s\n" "$pattern" "$run_idx" "$exit_code" "$real_s" "$user_s" "$sys_s" "$out_bytes"
+    fi
     read sum_real sum_user sum_sys sum_bytes sum_exit sum_count < <(
       awk -v sr="$sum_real" -v su="$sum_user" -v ss="$sum_sys" -v sb="$sum_bytes" -v se="$sum_exit" -v sc="$sum_count" \
           -v r="$real_s" -v u="$user_s" -v s="$sys_s" -v b="$out_bytes" -v e="$exit_code" \
@@ -92,9 +101,15 @@ if [[ "$sum_count" -gt 0 ]]; then
   avg_bytes="$(awk -v v="$sum_bytes" -v c="$sum_count" 'BEGIN{printf "%.0f", v/c}')"
   avg_exit="$(awk -v v="$sum_exit" -v c="$sum_count" 'BEGIN{printf "%.2f", v/c}')"
   echo
-  echo "| aggregate | count | avg exit | avg real(s) | avg user(s) | avg sys(s) | avg output(bytes) |"
-  echo "|---|---:|---:|---:|---:|---:|---:|"
-  echo "| all patterns | $sum_count | $avg_exit | $avg_real | $avg_user | $avg_sys | $avg_bytes |"
+  if [[ "$FORMAT" == "markdown" ]]; then
+    echo "| aggregate | count | avg exit | avg real(s) | avg user(s) | avg sys(s) | avg output(bytes) |"
+    echo "|---|---:|---:|---:|---:|---:|---:|"
+    echo "| all patterns | $sum_count | $avg_exit | $avg_real | $avg_user | $avg_sys | $avg_bytes |"
+  else
+    printf "%-22s %6s %10s %12s %12s %12s %18s\n" "aggregate" "count" "avg exit" "avg real(s)" "avg user(s)" "avg sys(s)" "avg output(bytes)"
+    printf "%-22s %6s %10s %12s %12s %12s %18s\n" "----------------------" "------" "----------" "------------" "------------" "------------" "------------------"
+    printf "%-22s %6s %10s %12s %12s %12s %18s\n" "all patterns" "$sum_count" "$avg_exit" "$avg_real" "$avg_user" "$avg_sys" "$avg_bytes"
+  fi
 
   if [[ -n "$MAX_AVG_REAL" ]]; then
     if ! awk -v v="$avg_real" -v max="$MAX_AVG_REAL" 'BEGIN{exit !(v <= max)}'; then

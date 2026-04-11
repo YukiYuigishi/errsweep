@@ -85,8 +85,8 @@ CACHE_BENCH_REPO="$PWD/tmp/moby" CACHE_BENCH_PRESET=moby make bench-cache-patter
 make bench-cache-pattern-check
 ```
 
-出力は Markdown テーブル形式で、`pattern / real / user / sys / output(bytes)` と
-全パターン平均（aggregate）を並べます。
+出力はデフォルトでターミナル向けプレーン表形式です。Markdown テーブルが必要な場合は
+`CACHE_BENCH_FORMAT=markdown` を指定してください。
 
 しきい値を直接指定する場合:
 
