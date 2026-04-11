@@ -52,4 +52,5 @@ var knownErrorMap = map[string][]SentinelInfo{
 	// net/http: リクエスト補助APIで返りうる sentinel
 	"(*net/http.Request).Cookie":   {{PkgPath: "net/http", Name: "ErrNoCookie"}},
 	"(*net/http.Request).FormFile": {{PkgPath: "net/http", Name: "ErrMissingFile"}},
+	"net/http.ReadRequest":         {{PkgPath: "io", Name: "EOF"}},
 }

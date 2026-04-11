@@ -77,3 +77,8 @@ func OSStat(path string) error { // want `OSStat returns sentinels: fs\.ErrNotEx
 func ScanNullString(v *sql.NullString) error { // want `ScanNullString returns sentinels: sql\.ErrNoRows` ScanNullString:`SentinelFact\(sql\.ErrNoRows\)`
 	return v.Scan(nil)
 }
+
+func ReadHTTPRequest(br *bufio.Reader) error { // want `ReadHTTPRequest returns sentinels: io\.EOF` ReadHTTPRequest:`SentinelFact\(io\.EOF\)`
+	_, err := http.ReadRequest(br)
+	return err
+}
