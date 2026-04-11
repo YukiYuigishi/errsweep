@@ -73,3 +73,7 @@ func OSStat(path string) error { // want `OSStat returns sentinels: fs\.ErrNotEx
 	_, err := os.Stat(path)
 	return err
 }
+
+func ScanNullString(v *sql.NullString) error { // want `ScanNullString returns sentinels: sql\.ErrNoRows` ScanNullString:`SentinelFact\(sql\.ErrNoRows\)`
+	return v.Scan(nil)
+}

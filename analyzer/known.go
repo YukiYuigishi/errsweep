@@ -38,8 +38,16 @@ var knownErrorMap = map[string][]SentinelInfo{
 	"(*io.PipeReader).Read":      {{PkgPath: "io", Name: "EOF"}},
 
 	// database/sql: 行が存在しない場合に ErrNoRows を返す
-	"(*database/sql.Row).Scan": {{PkgPath: "database/sql", Name: "ErrNoRows"}},
-	"(*database/sql.Row).Err":  {{PkgPath: "database/sql", Name: "ErrNoRows"}},
+	"(*database/sql.Row).Scan":         {{PkgPath: "database/sql", Name: "ErrNoRows"}},
+	"(*database/sql.Row).Err":          {{PkgPath: "database/sql", Name: "ErrNoRows"}},
+	"(*database/sql.NullString).Scan":  {{PkgPath: "database/sql", Name: "ErrNoRows"}},
+	"(*database/sql.NullInt64).Scan":   {{PkgPath: "database/sql", Name: "ErrNoRows"}},
+	"(*database/sql.NullInt32).Scan":   {{PkgPath: "database/sql", Name: "ErrNoRows"}},
+	"(*database/sql.NullInt16).Scan":   {{PkgPath: "database/sql", Name: "ErrNoRows"}},
+	"(*database/sql.NullFloat64).Scan": {{PkgPath: "database/sql", Name: "ErrNoRows"}},
+	"(*database/sql.NullBool).Scan":    {{PkgPath: "database/sql", Name: "ErrNoRows"}},
+	"(*database/sql.NullByte).Scan":    {{PkgPath: "database/sql", Name: "ErrNoRows"}},
+	"(*database/sql.NullTime).Scan":    {{PkgPath: "database/sql", Name: "ErrNoRows"}},
 
 	// net/http: リクエスト補助APIで返りうる sentinel
 	"(*net/http.Request).Cookie":   {{PkgPath: "net/http", Name: "ErrNoCookie"}},
