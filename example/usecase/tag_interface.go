@@ -22,6 +22,7 @@ type TagRepository interface {
 // インターフェース TagRepository を満たすことを宣言する。
 // アナライザはこの宣言から interface → concrete の対応を抽出する。
 var _ TagRepository = (*repository.TagRepository)(nil)
+var _ TagRepository = (*repository.TagRepositoryDummy)(nil)
 
 // GetTag はインターフェース経由でタグを取得する。
 // tagRepo.FindTagByID は SSA 上では Invoke 命令となり、

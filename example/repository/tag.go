@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 )
 
@@ -9,7 +10,12 @@ type TagRepository struct {
 	db *sql.DB
 }
 
+var ErrInvalidValue = errors.New("invalid value")
+
 func (t *TagRepository) CreateTag(name string) (int64, error) {
+	if name == "" {
+		return 0, ErrInvalidValue
+	}
 	res, err := t.db.Exec("INSERT INTO tags (name) VALUES (?)", name)
 	if err != nil {
 		return 0, fmt.Errorf("CreateTag: insert: %w", err)

@@ -10,11 +10,11 @@ type TagRepositoryDummy struct {
 	db *sql.DB
 }
 
-var ErrInvalidValue = errors.New("error invalid value")
+var ErrInvalidValueDummy = errors.New("error invalid value")
 
 func (t *TagRepositoryDummy) CreateTag(name string) (int64, error) {
 	if name == "" {
-		return 0, ErrInvalidValue
+		return 0, ErrInvalidValueDummy
 	}
 	res, err := t.db.Exec("INSERT INTO tags (name) VALUES (?)", name)
 	if err != nil {
@@ -34,7 +34,6 @@ func (t *TagRepositoryDummy) DeleteTag(id int) error {
 	return nil
 }
 
-// FindTagByID implements [usecase.TagRepository].
 func (t *TagRepositoryDummy) FindTagByID(id int) (Tag, error) {
 	if id <= 0 {
 		return Tag{}, ErrNotFound

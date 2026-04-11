@@ -65,8 +65,9 @@ func run(pass *analysis.Pass) (interface{}, error) {
 
 		pos := funcPos(fn)
 
-		// 合算ライン
-		if len(sentinels) > 0 {
+		// 合算ライン: 具象が複数あると errors が混ざって誤解を招くので、
+		// その場合は per-concrete 行だけに任せて合算は出さない。
+		if len(sentinels) > 0 && len(breakdown.byConcrete) <= 1 {
 			names := make([]string, len(sentinels))
 			for i, s := range sentinels {
 				names[i] = s.String()
