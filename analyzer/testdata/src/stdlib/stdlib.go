@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"syscall"
 )
 
 func ReadFile(f *os.File) error { // want `ReadFile returns sentinels: io\.EOF` ReadFile:`SentinelFact\(io\.EOF\)`
@@ -91,4 +92,8 @@ func AcceptTCP(ln *net.TCPListener) error { // want `AcceptTCP returns sentinels
 
 func ServeHTTPServer(s *http.Server, ln net.Listener) error { // want `ServeHTTPServer returns sentinels: http\.ErrServerClosed` ServeHTTPServer:`SentinelFact\(http\.ErrServerClosed\)`
 	return s.Serve(ln)
+}
+
+func CloseFD(fd int) error { // want `CloseFD returns sentinels: syscall\.EBADF` CloseFD:`SentinelFact\(syscall\.EBADF\)`
+	return syscall.Close(fd)
 }

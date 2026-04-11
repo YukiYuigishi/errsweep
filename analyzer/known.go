@@ -57,4 +57,7 @@ var knownErrorMap = map[string][]SentinelInfo{
 
 	// net: close 後の listener 操作で返りうる sentinel
 	"(*net.TCPListener).Accept": {{PkgPath: "net", Name: "ErrClosed"}},
+
+	// syscall: 不正 fd の close は Errno sentinel を返す
+	"syscall.Close": {{PkgPath: "syscall", Name: "EBADF"}},
 }

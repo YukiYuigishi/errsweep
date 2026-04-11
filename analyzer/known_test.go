@@ -65,6 +65,7 @@ func TestKnownErrorMapCoverage(t *testing.T) {
 		{"(*net/http.Request).FormFile", "http.ErrMissingFile"},
 		{"(*net/http.Server).Serve", "http.ErrServerClosed"},
 		{"(*net.TCPListener).Accept", "net.ErrClosed"},
+		{"syscall.Close", "syscall.EBADF"},
 	}
 	for _, tc := range cases {
 		v, ok := knownErrorMap[tc.key]
