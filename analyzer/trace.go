@@ -426,6 +426,11 @@ func knownInvokeSentinels(ifaceType types.Type, methodName string) ([]SentinelIn
 			{PkgPath: "context", Name: "DeadlineExceeded"},
 		}, true
 	}
+	if methodName == "Read" && isIOReaderInterface(ifaceType) {
+		return []SentinelInfo{
+			{PkgPath: "io", Name: "EOF"},
+		}, true
+	}
 	return nil, false
 }
 
@@ -435,6 +440,14 @@ func isContextInterface(t types.Type) bool {
 		return false
 	}
 	return named.Obj().Pkg().Path() == "context" && named.Obj().Name() == "Context"
+}
+
+func isIOReaderInterface(t types.Type) bool {
+	named, ok := t.(*types.Named)
+	if !ok || named.Obj() == nil || named.Obj().Pkg() == nil {
+		return false
+	}
+	return named.Obj().Pkg().Path() == "io" && named.Obj().Name() == "Reader"
 }
 
 // concreteTypesFromInterfaceValue は interface 値を組み立てた SSA を辿って

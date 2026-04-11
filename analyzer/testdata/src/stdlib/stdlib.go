@@ -46,3 +46,9 @@ func ReadLimited(r io.Reader) error { // want `ReadLimited returns sentinels: io
 func ContextErr(ctx context.Context) error { // want `ContextErr returns sentinels: context\.Canceled, context\.DeadlineExceeded` ContextErr:`SentinelFact\(context\.Canceled, context\.DeadlineExceeded\)`
 	return ctx.Err()
 }
+
+func ReaderInvoke(r io.Reader) error { // want `ReaderInvoke returns sentinels: io\.EOF` ReaderInvoke:`SentinelFact\(io\.EOF\)`
+	buf := make([]byte, 1)
+	_, err := r.Read(buf)
+	return err
+}
