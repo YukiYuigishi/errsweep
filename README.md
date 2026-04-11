@@ -64,6 +64,27 @@ make test-editor
 make test-all
 ```
 
+## ベンチマーク（cache-pattern 比較）
+
+`sentinel-lsp-proxy --cache-pattern` の効果を比較するための簡易ベンチです。
+
+```bash
+# デフォルト対象（example module）で比較
+make bench-cache-pattern
+
+# moby向けプリセットで比較（tmp/moby を使用）
+make bench-cache-pattern-moby
+
+# 対象リポジトリを手動指定
+CACHE_BENCH_REPO="$PWD/tmp/moby" CACHE_BENCH_PRESET=moby make bench-cache-pattern
+
+# パターンを明示指定
+./scripts/bench-cache-pattern.sh ./... ./daemon/... ./pkg/...
+```
+
+出力は Markdown テーブル形式で、`pattern / real / user / sys / output(bytes)` と
+全パターン平均（aggregate）を並べます。
+
 ### エディタ E2E の内容
 
 - `test-editor-nvim`

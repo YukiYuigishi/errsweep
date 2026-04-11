@@ -3,7 +3,7 @@ PROXY_BIN  := sentinel-lsp-proxy
 LSP_BIN    := sentinel-lsp
 GOBIN      := $(shell go env GOPATH)/bin
 
-.PHONY: all build install dev-setup dev-tools check-tools setup-hooks test test-all test-v test-analyzer test-flags test-neovim-compat test-editor-nvim test-editor-vscode test-editor lint lint-go lint-fix clean demo demo-example
+.PHONY: all build install dev-setup dev-tools check-tools setup-hooks test test-all test-v test-analyzer test-flags test-neovim-compat test-editor-nvim test-editor-vscode test-editor lint lint-go lint-fix clean demo demo-example bench-cache-pattern bench-cache-pattern-moby
 
 all: build
 
@@ -89,6 +89,12 @@ demo: build
 
 demo-example: build
 	-cd example && ../$(BIN) ./...
+
+bench-cache-pattern: build
+	./scripts/bench-cache-pattern.sh
+
+bench-cache-pattern-moby: build
+	CACHE_BENCH_REPO=$(PWD)/tmp/moby CACHE_BENCH_PRESET=moby ./scripts/bench-cache-pattern.sh
 
 clean:
 	rm -f $(BIN) $(PROXY_BIN) $(LSP_BIN)
