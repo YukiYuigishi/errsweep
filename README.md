@@ -44,6 +44,18 @@ make install
 
 `$(go env GOPATH)/bin` にバイナリが配置されます。ローカルビルドのみ（インストールなし）の場合は `make build`。
 
+### 開発環境セットアップ（自動）
+
+```bash
+make dev-setup
+```
+
+実行内容:
+- `go mod download`
+- `gopls` / `sentinelfind` / `sentinel-lsp-proxy` / `sentinel-lsp` のインストール
+- 必須コマンド（go, nvim, code など）の存在チェック
+- ローカルバイナリのビルド
+
 ### 動作確認
 
 ```bash
@@ -433,6 +445,27 @@ go test ./analyzer/ -run TestAnalyzer_Basic -v
 go test ./analyzer/ -run TestAnalyzer_Wrapped -v
 go test ./analyzer/ -run TestAnalyzer_Phi -v
 ```
+
+Neovim 互換を意識した LSP/proxy 回帰テストのみを実行する場合：
+
+```bash
+make test-neovim-compat
+```
+
+実エディタ（headless）での自動確認:
+
+```bash
+# Neovim 経由の起動確認
+make test-editor-nvim
+
+# VS Code 経由の起動確認（隔離プロファイルを使用）
+make test-editor-vscode
+
+# 両方まとめて実行
+make test-editor
+```
+
+`test-editor-nvim` はユーザーの既存設定を使わず、毎回一時ディレクトリの最小構成（`-u NONE --noplugin` + 分離 XDG パス）で実行します。
 
 ## テストフィクスチャの追加方法
 

@@ -62,14 +62,14 @@ type cacheKey struct {
 // 同名関数が複数パッケージに存在する場合は最後に登録されたエントリが勝つ。
 type Cache struct {
 	byLocation map[cacheKey]*CacheEntry
-	byFuncName map[string]*CacheEntry // FuncName → entry
+	byFuncName map[string][]*CacheEntry // FuncName/別名 → entries
 }
 
 // NewCache は空の Cache を生成する。
 func NewCache() Cache {
 	return Cache{
 		byLocation: make(map[cacheKey]*CacheEntry),
-		byFuncName: make(map[string]*CacheEntry),
+		byFuncName: make(map[string][]*CacheEntry),
 	}
 }
 
@@ -79,7 +79,19 @@ func (c Cache) Len() int { return len(c.byLocation) }
 // addEntry はエントリを両方のインデックスに登録する。
 func (c *Cache) addEntry(key cacheKey, entry *CacheEntry) {
 	c.byLocation[key] = entry
-	c.byFuncName[entry.FuncName] = entry
+	c.byFuncName[entry.FuncName] = appendUniqueEntry(c.byFuncName[entry.FuncName], entry)
+	if simple := simpleFuncName(entry.FuncName); simple != "" && simple != entry.FuncName {
+		c.byFuncName[simple] = appendUniqueEntry(c.byFuncName[simple], entry)
+	}
+}
+
+func appendUniqueEntry(entries []*CacheEntry, entry *CacheEntry) []*CacheEntry {
+	for _, e := range entries {
+		if e == entry {
+			return entries
+		}
+	}
+	return append(entries, entry)
 }
 
 // unionSentinels は a と b を重複排除してソートしたスライスを返す。
@@ -116,8 +128,38 @@ func (c Cache) Lookup(file string, line int) (*CacheEntry, bool) {
 // lookupByFuncName は関数名で CacheEntry を返す。
 // 呼び出し側でのホバー時のフォールバックとして使う。
 func (c Cache) lookupByFuncName(name string) (*CacheEntry, bool) {
-	entry, ok := c.byFuncName[name]
-	return entry, ok
+	entries, ok := c.byFuncName[name]
+	if !ok || len(entries) == 0 {
+		return nil, false
+	}
+	if len(entries) == 1 {
+		return entries[0], true
+	}
+	merged := &CacheEntry{
+		FuncName:   name,
+		ByConcrete: make(map[string][]string),
+	}
+	for _, e := range entries {
+		merged.Sentinels = unionSentinels(merged.Sentinels, e.Sentinels)
+		for concrete, sentinels := range e.ByConcrete {
+			merged.ByConcrete[concrete] = unionSentinels(merged.ByConcrete[concrete], sentinels)
+		}
+	}
+	if len(merged.ByConcrete) == 0 {
+		merged.ByConcrete = nil
+	}
+	return merged, true
+}
+
+// simpleFuncName は "(*T).Method" や "pkg.Func" から "Method"/"Func" を返す。
+func simpleFuncName(name string) string {
+	if i := strings.LastIndex(name, ")."); i >= 0 && i+2 < len(name) {
+		return name[i+2:]
+	}
+	if i := strings.LastIndex(name, "."); i >= 0 && i+1 < len(name) {
+		return name[i+1:]
+	}
+	return name
 }
 
 type diagnostic struct {

@@ -286,3 +286,38 @@ func TestProxy_HoverMethodSSAName(t *testing.T) {
 		t.Errorf("method hover with SSA-style cache key should show sentinel info\ngot: %s", outMsg)
 	}
 }
+
+// TestProxy_HoverCallSite_MergeSameFuncName は、同名関数が複数パッケージに存在する場合でも
+// 上書きではなく union 結果が hover に表示されることを確認する。
+func TestProxy_HoverCallSite_MergeSameFuncName(t *testing.T) {
+	cache := newTestCache(map[cacheKey]*CacheEntry{
+		{file: "/workspace/pkg/a/new_hoge.go", line: 10}: {
+			FuncName:  "NewHoge",
+			Sentinels: []string{"a.ErrA"},
+		},
+		{file: "/workspace/pkg/b/new_hoge.go", line: 20}: {
+			FuncName:  "NewHoge",
+			Sentinels: []string{"b.ErrB"},
+		},
+	})
+	p := NewProxy(cache)
+
+	reqBody := hoverRequest(30, "/workspace/handler.go", 50, 8)
+	if err := p.trackRequest(reqBody); err != nil {
+		t.Fatal(err)
+	}
+	respBody := hoverResponse(30, "/workspace/handler.go", 50, "```go\nfunc NewHoge() error\n```")
+	var out bytes.Buffer
+	if err := p.processServerMessage(respBody, &out); err != nil {
+		t.Fatal(err)
+	}
+
+	outMsg, err := readMessage(bufio.NewReader(&out))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(outMsg)
+	if !strings.Contains(got, "a.ErrA") || !strings.Contains(got, "b.ErrB") {
+		t.Fatalf("expected merged sentinel list for same function name, got: %s", got)
+	}
+}

@@ -93,6 +93,65 @@ func TestCache_LookupByFuncName(t *testing.T) {
 	}
 }
 
+func TestCache_LookupByFuncName_MergeSameNameAcrossPackages(t *testing.T) {
+	const multiPkgJSON = `{
+		"pkg/a": {
+			"sentinelfind": [
+				{
+					"posn": "/workspace/a/new_hoge.go:10:2",
+					"message": "NewHoge returns sentinels: a.ErrA"
+				}
+			]
+		},
+		"pkg/b": {
+			"sentinelfind": [
+				{
+					"posn": "/workspace/b/new_hoge.go:20:2",
+					"message": "NewHoge returns sentinels: b.ErrB"
+				}
+			]
+		}
+	}`
+	c, err := parseSentinelfindJSON([]byte(multiPkgJSON))
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, ok := c.lookupByFuncName("NewHoge")
+	if !ok {
+		t.Fatal("entry not found by func name NewHoge")
+	}
+	if len(entry.Sentinels) != 2 {
+		t.Fatalf("want merged 2 sentinels, got %d: %v", len(entry.Sentinels), entry.Sentinels)
+	}
+	if entry.Sentinels[0] != "a.ErrA" || entry.Sentinels[1] != "b.ErrB" {
+		t.Fatalf("unexpected merged sentinels: %v", entry.Sentinels)
+	}
+}
+
+func TestCache_LookupByFuncName_MethodFallbackBySimpleName(t *testing.T) {
+	const methodJSON = `{
+		"pkg/usecase": {
+			"sentinelfind": [
+				{
+					"posn": "/workspace/usecase/service.go:30:2",
+					"message": "(*Service).Create returns sentinels: usecase.ErrInvalid"
+				}
+			]
+		}
+	}`
+	c, err := parseSentinelfindJSON([]byte(methodJSON))
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, ok := c.lookupByFuncName("Create")
+	if !ok {
+		t.Fatal("entry not found by simple method name Create")
+	}
+	if len(entry.Sentinels) != 1 || entry.Sentinels[0] != "usecase.ErrInvalid" {
+		t.Fatalf("unexpected sentinels: %v", entry.Sentinels)
+	}
+}
+
 func TestCache_MultipleSentinels(t *testing.T) {
 	const multiJSON = `{
 		"pkg": {
