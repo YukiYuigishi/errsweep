@@ -1,0 +1,13 @@
+{
+  "name": "errsweep-vscode-hover-e2e",
+  "displayName": "errsweep vscode hover e2e",
+  "version": "0.0.1",
+  "publisher": "errsweep",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "main": "./extension.js",
+  "activationEvents": [
+    "*"
+  ]
+}

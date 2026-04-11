@@ -12,6 +12,7 @@ SETTINGS_DIR="$USER_DIR/User"
 SETTINGS_JSON="$SETTINGS_DIR/settings.json"
 PROXY_LOG="$TMPDIR/proxy.log"
 WRAPPER="$TMPDIR/sentinel-lsp-proxy-wrapper.sh"
+HOVER_EXT_DIR="$ROOT/scripts/vscode-hover-e2e"
 CODE_PID=""
 
 terminate_pid() {
@@ -69,6 +70,19 @@ if ! code --list-extensions --extensions-dir "$EXT_DIR" | grep -qx "golang.go"; 
   code --install-extension golang.go --extensions-dir "$EXT_DIR" --force >/dev/null 2>&1 || true
 fi
 
+if ! code --list-extensions --extensions-dir "$EXT_DIR" | grep -qx "errsweep.errsweep-vscode-hover-e2e"; then
+  code --install-extension "$HOVER_EXT_DIR" --extensions-dir "$EXT_DIR" --force >/dev/null 2>&1 || true
+fi
+
+HOVER_FILE="$ROOT/example/usecase/user.go"
+HOVER_LINE="8"
+HOVER_CHAR="5"
+EXPECT_SENTINEL="ErrNotFound"
+
+ERRSWEEP_HOVER_FILE="$HOVER_FILE" \
+ERRSWEEP_HOVER_LINE="$HOVER_LINE" \
+ERRSWEEP_HOVER_CHAR="$HOVER_CHAR" \
+ERRSWEEP_EXPECT_SENTINEL="$EXPECT_SENTINEL" \
 code \
   --user-data-dir "$USER_DIR" \
   --extensions-dir "$EXT_DIR" \
@@ -77,11 +91,11 @@ code \
   --log trace \
   --disable-workspace-trust \
   "$ROOT" \
-  -g "$ROOT/example/usecase/user.go:9:5" \
+  -g "$HOVER_FILE:9:5" \
   >"$LOG_STD" 2>&1 &
 CODE_PID=$!
 
-for _ in $(seq 1 40); do
+for _ in $(seq 1 60); do
   if grep -q "sentinel-lsp-proxy: loaded " "$PROXY_LOG" 2>/dev/null; then
     break
   fi
@@ -91,7 +105,7 @@ done
 terminate_pid "$CODE_PID"
 wait "$CODE_PID" 2>/dev/null || true
 
-if grep -q "sentinel-lsp-proxy: loaded " "$PROXY_LOG" 2>/dev/null; then
+if grep -q "sentinel-lsp-proxy: loaded " "$PROXY_LOG" 2>/dev/null && ! grep -q "Hover E2E failed:" "$LOG_STD"; then
   echo "vscode editor test: PASS"
 else
   echo "vscode editor test: FAIL"
