@@ -20,10 +20,31 @@ cd ..
 ./sentinelfind ./example/...
 ```
 
+## VS Code で hover を確認する
+
+`example/.vscode/settings.json` は `sentinel-lsp-proxy` を使う前提です。
+
+```bash
+# リポジトリルートで実行
+make build
+go install ./cmd/sentinel-lsp-proxy
+go install ./cmd/sentinelfind
+```
+
+その後、VS Code で `example/` を開いてウィンドウを再読み込みし、
+`repository/integration.go` の `ResolveTagID` などに hover すると
+`Possible Sentinel Errors` が追記されます。
+
+表示されない場合は、VS Code を起動したシェル環境で次を確認してください。
+
+```bash
+command -v sentinel-lsp-proxy
+command -v sentinelfind
+```
+
 ## 実運用寄りケース
 
 - `usecase/integration_story.go`
   - `repository.FetchTagNameFromUpstream`（HTTP + context + io.EOF）
   - `repository.ResolveTagID`（database/sql.ErrNoRows）
   - usecase では依存呼び出しの順序制御とエラー文脈付与に集中
-
