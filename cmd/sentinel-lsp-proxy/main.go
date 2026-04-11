@@ -17,6 +17,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"errors"
 	"flag"
 	"io"
@@ -48,6 +49,24 @@ func main() {
 	}
 	log.Printf("sentinel-lsp-proxy: loaded %d entries from sentinelfind", cache.Len())
 	p := proxy.NewProxy(cache)
+	refreshCh := make(chan struct{}, 1)
+
+	// 差分再解析: 保存/ファイル変更通知を受けたら debounce してキャッシュを再構築する。
+	go func() {
+		for range refreshCh {
+			time.Sleep(300 * time.Millisecond) // debounce
+			for len(refreshCh) > 0 {
+				<-refreshCh
+			}
+			cache, err := cacheLoader(*sentinelfindPath, *workspace)
+			if err != nil {
+				log.Printf("sentinel-lsp-proxy: cache refresh failed: %v", err)
+				continue
+			}
+			p.SetCache(cache)
+			log.Printf("sentinel-lsp-proxy: cache refreshed (%d entries)", cache.Len())
+		}
+	}()
 
 	// gopls を子プロセスとして起動
 	// #nosec G204 -- goplsPath/goplsSubArgs はローカル開発者が明示指定するツール実行用引数。
@@ -80,6 +99,12 @@ func main() {
 			if err := p.TrackRequest(raw); err != nil {
 				log.Printf("sentinel-lsp-proxy: trackRequest: %v", err)
 			}
+			if shouldRefreshCache(raw) {
+				select {
+				case refreshCh <- struct{}{}:
+				default:
+				}
+			}
 			if err := proxy.WriteMessage(goplsIn, raw); err != nil {
 				log.Printf("sentinel-lsp-proxy: write to gopls: %v", err)
 				return
@@ -104,5 +129,25 @@ func main() {
 
 	if err := gopls.Wait(); err != nil {
 		log.Printf("sentinel-lsp-proxy: gopls exited: %v", err)
+	}
+}
+
+func shouldRefreshCache(raw []byte) bool {
+	var msg struct {
+		Method string          `json:"method"`
+		Params json.RawMessage `json:"params"`
+	}
+	if err := json.Unmarshal(raw, &msg); err != nil || msg.Method == "" {
+		return false
+	}
+	switch msg.Method {
+	case "textDocument/didSave",
+		"workspace/didChangeWatchedFiles",
+		"workspace/didRenameFiles",
+		"workspace/didCreateFiles",
+		"workspace/didDeleteFiles":
+		return true
+	default:
+		return false
 	}
 }
