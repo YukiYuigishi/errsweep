@@ -55,6 +55,28 @@ make dev-setup
 - `gopls` / `sentinelfind` / `sentinel-lsp-proxy` / `sentinel-lsp` のインストール
 - 必須コマンド（go, nvim, code など）の存在チェック
 - ローカルバイナリのビルド
+- git hook（`core.hooksPath=.githooks`）の設定
+
+### commit hook 設定
+
+```bash
+make setup-hooks
+```
+
+`pre-commit` で以下を実行します:
+- `golangci-lint run --fix ./...`
+- `go test ./...`
+- `make test-neovim-compat`
+
+### golangci-lint
+
+```bash
+# ローカル実行
+make lint-go
+
+# 自動修正付き
+make lint-fix
+```
 
 ### 動作確認
 

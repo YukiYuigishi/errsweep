@@ -49,6 +49,11 @@ jobs:
           make dev-tools
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
+      - name: Run golangci-lint
+        run: |
+          set -euxo pipefail
+          make lint-go
+
       - name: Run all tests (unit + Neovim E2E + VS Code E2E)
         run: |
           set -euxo pipefail

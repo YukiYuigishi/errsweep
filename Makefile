@@ -3,7 +3,7 @@ PROXY_BIN  := sentinel-lsp-proxy
 LSP_BIN    := sentinel-lsp
 GOBIN      := $(shell go env GOPATH)/bin
 
-.PHONY: all build install dev-setup dev-tools check-tools test test-all test-v test-analyzer test-flags test-neovim-compat test-editor-nvim test-editor-vscode test-editor lint clean demo demo-example
+.PHONY: all build install dev-setup dev-tools check-tools setup-hooks test test-all test-v test-analyzer test-flags test-neovim-compat test-editor-nvim test-editor-vscode test-editor lint lint-go lint-fix clean demo demo-example
 
 all: build
 
@@ -21,6 +21,7 @@ install:
 dev-tools:
 	go mod download
 	go install golang.org/x/tools/gopls@latest
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 	go install ./cmd/sentinelfind
 	go install ./cmd/sentinel-lsp-proxy
 	go install ./cmd/sentinel-lsp
@@ -31,18 +32,32 @@ check-tools:
 	@command -v nvim >/dev/null || (echo "nvim not found"; exit 1)
 	@command -v code >/dev/null || (echo "code not found"; exit 1)
 	@command -v gopls >/dev/null || (echo "gopls not found. run: make dev-tools"; exit 1)
+	@command -v golangci-lint >/dev/null || (echo "golangci-lint not found. run: make dev-tools"; exit 1)
 	@command -v sentinelfind >/dev/null || (echo "sentinelfind not found. run: make dev-tools"; exit 1)
 	@command -v sentinel-lsp-proxy >/dev/null || (echo "sentinel-lsp-proxy not found. run: make dev-tools"; exit 1)
 	@echo "tool check: OK"
 
 dev-setup: dev-tools check-tools build
 	@chmod +x scripts/editor-test-nvim.sh scripts/editor-test-vscode.sh
+	@chmod +x .githooks/pre-commit
+	@git config core.hooksPath .githooks
 	@echo "development setup complete"
+
+setup-hooks:
+	@chmod +x .githooks/pre-commit
+	@git config core.hooksPath .githooks
+	@echo "git hooks configured (.githooks)"
 
 test:
 	go test ./...
 
 test-all: check-tools test test-editor
+
+lint-go:
+	golangci-lint run ./...
+
+lint-fix:
+	golangci-lint run --fix ./...
 
 test-v:
 	go test ./analyzer/... -v
@@ -66,6 +81,7 @@ test-editor-vscode: build
 test-editor: test-editor-nvim test-editor-vscode
 
 lint: build
+	$(MAKE) lint-go
 	./$(BIN) ./analyzer/...
 
 demo: build

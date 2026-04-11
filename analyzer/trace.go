@@ -424,8 +424,9 @@ func resolveIndirectCallee(call ssa.CallCommon, ctx *traceCtx) *ssa.Function {
 // var f FuncType = ConcreteFunc パターンで初期化されたグローバル変数のマップを構築する。
 //
 // var f FuncType = ConcreteFunc の SSA 表現（init 内）:
-//   t4 = changetype FuncType <- func(...) (ConcreteFunc)  ; *ssa.ChangeType
-//   *f = t4                                                ; *ssa.Store
+//
+//	t4 = changetype FuncType <- func(...) (ConcreteFunc)  ; *ssa.ChangeType
+//	*f = t4                                                ; *ssa.Store
 func BuildGlobalFuncMap(srcFuncs []*ssa.Function, pkg *ssa.Package) map[*ssa.Global]*ssa.Function {
 	m := make(map[*ssa.Global]*ssa.Function)
 
@@ -506,4 +507,3 @@ func appendUniq(dst []SentinelInfo, src []SentinelInfo) []SentinelInfo {
 	}
 	return dst
 }
-

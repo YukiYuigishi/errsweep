@@ -11,8 +11,10 @@ import (
 // %w に対応する引数を返す。fmt.Errorf でない場合または %w がない場合は nil を返す。
 //
 // Go SSA では varargs は []any のスライスとして渡される。例:
-//   fmt.Errorf("msg: %w", err)
-//   → args[0] = Const("msg: %w"), args[1] = Slice(Alloc [1]any)
+//
+//	fmt.Errorf("msg: %w", err)
+//	→ args[0] = Const("msg: %w"), args[1] = Slice(Alloc [1]any)
+//
 // そのため、スライスの backing array から対象インデックスの値を取り出す。
 func fmtErrorfWrappedArg(call *ssa.Call) ssa.Value {
 	callee := call.Call.StaticCallee()

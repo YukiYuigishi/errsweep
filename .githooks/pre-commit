@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+
+echo "[pre-commit] golangci-lint run --fix ./..."
+golangci-lint run --fix ./...
+
+echo "[pre-commit] go test ./..."
+go test ./...
+
+echo "[pre-commit] make test-neovim-compat"
+make test-neovim-compat

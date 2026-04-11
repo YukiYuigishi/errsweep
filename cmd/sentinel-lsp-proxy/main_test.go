@@ -14,9 +14,9 @@ import (
 )
 
 var (
-	proxyBin       string
+	proxyBin        string
 	sentinelfindBin string
-	dummyGoplsBin  string
+	dummyGoplsBin   string
 )
 
 func TestMain(m *testing.M) {
