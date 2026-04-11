@@ -1,4 +1,4 @@
-package analyzer_test
+package analyzer
 
 import (
 	"go/token"
@@ -48,6 +48,32 @@ func TestKnownKeys(t *testing.T) {
 		if !seen[key] {
 			seen[key] = true
 			t.Logf("%q", key)
+		}
+	}
+}
+
+func TestKnownErrorMapCoverage(t *testing.T) {
+	cases := []struct {
+		key       string
+		wantFirst string
+	}{
+		{"(*os.File).Read", "io.EOF"},
+		{"os.ReadFile", "fs.ErrNotExist"},
+		{"(*database/sql.Row).Scan", "sql.ErrNoRows"},
+		{"(*database/sql.NullString).Scan", "sql.ErrNoRows"},
+		{"(*net/http.Request).Cookie", "http.ErrNoCookie"},
+		{"(*net/http.Request).FormFile", "http.ErrMissingFile"},
+	}
+	for _, tc := range cases {
+		v, ok := knownErrorMap[tc.key]
+		if !ok {
+			t.Fatalf("knownErrorMap[%q] missing", tc.key)
+		}
+		if len(v) == 0 {
+			t.Fatalf("knownErrorMap[%q] is empty", tc.key)
+		}
+		if got := v[0].String(); got != tc.wantFirst {
+			t.Fatalf("knownErrorMap[%q][0] = %q, want %q", tc.key, got, tc.wantFirst)
 		}
 	}
 }
