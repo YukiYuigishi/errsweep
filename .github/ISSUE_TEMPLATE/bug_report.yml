@@ -1,0 +1,41 @@
+name: Bug report
+description: Report a reproducible problem
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      description: Provide exact commands or code to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: input
+    id: go_version
+    attributes:
+      label: Go version
+      placeholder: go version
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: macOS / Linux / Windows

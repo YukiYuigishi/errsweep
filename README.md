@@ -48,8 +48,8 @@ make setup-hooks
 `pre-commit` では次を実行します。
 
 1. `golangci-lint run --fix ./...`
-2. `go test ./...`
-3. `make test-neovim-compat`
+2. `make test-all`
+3. 差分が発生した場合はコミットを停止（再ステージを要求）
 
 ## テスト
 
@@ -161,3 +161,9 @@ vim.lsp.enable('gopls')
 - インターフェース経由の動的ディスパッチは限定的
 - 標準ライブラリ既知エラーはマッピングベース
 - `%w` ラップのみ同一性維持として追跡（`%v` は対象外）
+
+## OSS ガイドライン
+
+- [Contributing](CONTRIBUTING.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Security Policy](SECURITY.md)
