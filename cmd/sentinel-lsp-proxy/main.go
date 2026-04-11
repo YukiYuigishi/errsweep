@@ -50,12 +50,14 @@ func main() {
 
 	// flag.Args() には VS Code が渡してくる gopls サブコマンド・フラグ（"serve" など）が入る
 	goplsSubArgs := flag.Args()
+	initialBuildStart := time.Now()
 	cache, err := cacheLoader(*sentinelfindPath, *workspace)
+	initialBuildElapsed := time.Since(initialBuildStart)
 	if err != nil {
-		log.Printf("sentinel-lsp-proxy: cache build failed (continuing without sentinels): %v", err)
+		log.Printf("sentinel-lsp-proxy: cache build failed after %s (continuing without sentinels): %v", initialBuildElapsed, err)
 		cache = proxy.NewCache()
 	}
-	log.Printf("sentinel-lsp-proxy: loaded %d entries from sentinelfind", cache.Len())
+	log.Printf("sentinel-lsp-proxy: loaded %d entries from sentinelfind in %s", cache.Len(), initialBuildElapsed)
 	p := proxy.NewProxy(cache)
 	refreshCh := make(chan struct{}, 1)
 
@@ -72,13 +74,15 @@ func main() {
 				continue
 			}
 			lastRefreshAttempt = now
+			refreshStart := time.Now()
 			cache, err := cacheLoader(*sentinelfindPath, *workspace)
+			refreshElapsed := time.Since(refreshStart)
 			if err != nil {
-				log.Printf("sentinel-lsp-proxy: cache refresh failed: %v", err)
+				log.Printf("sentinel-lsp-proxy: cache refresh failed after %s: %v", refreshElapsed, err)
 				continue
 			}
 			p.SetCache(cache)
-			log.Printf("sentinel-lsp-proxy: cache refreshed (%d entries)", cache.Len())
+			log.Printf("sentinel-lsp-proxy: cache refreshed (%d entries, %s)", cache.Len(), refreshElapsed)
 		}
 	}()
 
