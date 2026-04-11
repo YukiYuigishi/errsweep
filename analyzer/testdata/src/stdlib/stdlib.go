@@ -63,3 +63,13 @@ func RequestFormFile(r *http.Request) error { // want `RequestFormFile returns s
 	_, _, err := r.FormFile("avatar")
 	return err
 }
+
+func OSReadFile(path string) error { // want `OSReadFile returns sentinels: fs\.ErrNotExist, fs\.ErrPermission` OSReadFile:`SentinelFact\(fs\.ErrNotExist, fs\.ErrPermission\)`
+	_, err := os.ReadFile(path)
+	return err
+}
+
+func OSStat(path string) error { // want `OSStat returns sentinels: fs\.ErrNotExist, fs\.ErrPermission` OSStat:`SentinelFact\(fs\.ErrNotExist, fs\.ErrPermission\)`
+	_, err := os.Stat(path)
+	return err
+}

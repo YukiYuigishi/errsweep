@@ -8,6 +8,14 @@ var knownErrorMap = map[string][]SentinelInfo{
 	// os: ファイル読み込みは EOF で終端を通知する
 	"(*os.File).Read":   {{PkgPath: "io", Name: "EOF"}},
 	"(*os.File).ReadAt": {{PkgPath: "io", Name: "EOF"}},
+	"os.ReadFile": {
+		{PkgPath: "io/fs", Name: "ErrNotExist"},
+		{PkgPath: "io/fs", Name: "ErrPermission"},
+	},
+	"os.Stat": {
+		{PkgPath: "io/fs", Name: "ErrNotExist"},
+		{PkgPath: "io/fs", Name: "ErrPermission"},
+	},
 
 	// bufio: デリミタ/バイト単位読み込みは EOF を返しうる
 	"(*bufio.Reader).Read":       {{PkgPath: "io", Name: "EOF"}},
