@@ -14,6 +14,8 @@ type traceCtx struct {
 	visited      map[ssa.Value]bool
 	visitedFuncs map[*ssa.Function]bool                 // 関数間の循環呼び出し検出
 	facts        func(types.Object, *SentinelFact) bool // ImportObjectFact
+	reportf      func(token.Pos, string, ...interface{})
+	warnedNoWrap map[*ssa.Call]bool
 	// globalFuncs は var f FuncType = Concrete の初期値マップ（関数変数 DI 解決用）。
 	// analyzer.go の run() で SrcFuncs と pkg.Members["init"] を走査して構築する。
 	globalFuncs map[*ssa.Global]*ssa.Function
@@ -75,6 +77,10 @@ func traceValue(v ssa.Value, depth int, ctx *traceCtx) []SentinelInfo {
 		// fmt.Errorf %w のアンラップ
 		if wrapped := fmtErrorfWrappedArg(x); wrapped != nil {
 			return traceValue(wrapped, depth+1, ctx)
+		}
+		if fmtErrorfLosesIdentity(x) {
+			reportNoWrapFmtErrorf(x, ctx)
+			return nil
 		}
 		// 静的呼び出し先を再帰探索
 		if callee := x.Call.StaticCallee(); callee != nil {
@@ -510,4 +516,18 @@ func appendUniq(dst []SentinelInfo, src []SentinelInfo) []SentinelInfo {
 		}
 	}
 	return dst
+}
+
+func reportNoWrapFmtErrorf(call *ssa.Call, ctx *traceCtx) {
+	if ctx == nil || ctx.reportf == nil || call == nil {
+		return
+	}
+	if ctx.warnedNoWrap == nil {
+		ctx.warnedNoWrap = make(map[*ssa.Call]bool)
+	}
+	if ctx.warnedNoWrap[call] {
+		return
+	}
+	ctx.warnedNoWrap[call] = true
+	ctx.reportf(call.Pos(), "fmt.Errorf without %%w loses sentinel identity; sentinel tracing skipped")
 }

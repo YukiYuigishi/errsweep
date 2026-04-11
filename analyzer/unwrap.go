@@ -50,6 +50,29 @@ func fmtErrorfWrappedArg(call *ssa.Call) ssa.Value {
 	return extractSliceElement(args[1], wIndex)
 }
 
+// fmtErrorfLosesIdentity は fmt.Errorf 呼び出しで %w が使われていないケースを判定する。
+// この場合は元エラーの同一性が保たれないため sentinel は追跡対象外とする。
+func fmtErrorfLosesIdentity(call *ssa.Call) bool {
+	callee := call.Call.StaticCallee()
+	if callee == nil {
+		return false
+	}
+	if callee.Package() == nil || callee.Package().Pkg.Path() != "fmt" || callee.Name() != "Errorf" {
+		return false
+	}
+
+	args := call.Call.Args
+	if len(args) < 1 {
+		return false
+	}
+	fmtArg, ok := args[0].(*ssa.Const)
+	if !ok || fmtArg.Value == nil || fmtArg.Value.Kind() != constant.String {
+		return false
+	}
+	fmtStr := constant.StringVal(fmtArg.Value)
+	return findWVerbIndex(fmtStr) < 0
+}
+
 // extractSliceElement は SSA で生成された varargs スライスから index 番目の要素を返す。
 // パターン: Slice(Alloc [N]any) の backing array への Store を探す。
 func extractSliceElement(sliceVal ssa.Value, index int) ssa.Value {

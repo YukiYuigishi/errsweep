@@ -119,8 +119,10 @@ func collectSentinels(fn *ssa.Function, pass *analysis.Pass, globalFuncs map[*ss
 			}
 			return pass.ImportObjectFact(obj, fact)
 		},
-		globalFuncs: globalFuncs,
-		ifaceImpls:  ifaceImpls,
+		globalFuncs:  globalFuncs,
+		ifaceImpls:   ifaceImpls,
+		reportf:      pass.Reportf,
+		warnedNoWrap: make(map[*ssa.Call]bool),
 	}
 
 	var result []SentinelInfo

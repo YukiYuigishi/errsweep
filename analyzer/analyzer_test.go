@@ -67,3 +67,8 @@ func TestAnalyzer_CustomType(t *testing.T) {
 	testdata := analysistest.TestData()
 	analysistest.Run(t, testdata, analyzer.Analyzer, "customtype")
 }
+
+func TestAnalyzer_NonWrapFmtErrorf(t *testing.T) {
+	testdata := analysistest.TestData()
+	analysistest.Run(t, testdata, analyzer.Analyzer, "nonwrap")
+}
