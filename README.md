@@ -80,10 +80,19 @@ CACHE_BENCH_REPO="$PWD/tmp/moby" CACHE_BENCH_PRESET=moby make bench-cache-patter
 
 # パターンを明示指定
 ./scripts/bench-cache-pattern.sh ./... ./daemon/... ./pkg/...
+
+# しきい値チェック付き（回帰検知）
+make bench-cache-pattern-check
 ```
 
 出力は Markdown テーブル形式で、`pattern / real / user / sys / output(bytes)` と
 全パターン平均（aggregate）を並べます。
+
+しきい値を直接指定する場合:
+
+```bash
+CACHE_BENCH_MAX_AVG_REAL=2.0 CACHE_BENCH_MAX_AVG_EXIT=0.0 ./scripts/bench-cache-pattern.sh
+```
 
 ### エディタ E2E の内容
 

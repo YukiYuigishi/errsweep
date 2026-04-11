@@ -96,5 +96,8 @@ bench-cache-pattern: build
 bench-cache-pattern-moby: build
 	CACHE_BENCH_REPO=$(PWD)/tmp/moby CACHE_BENCH_PRESET=moby ./scripts/bench-cache-pattern.sh
 
+bench-cache-pattern-check: build
+	CACHE_BENCH_MAX_AVG_REAL=2.0 CACHE_BENCH_MAX_AVG_EXIT=0.0 ./scripts/bench-cache-pattern.sh
+
 clean:
 	rm -f $(BIN) $(PROXY_BIN) $(LSP_BIN)

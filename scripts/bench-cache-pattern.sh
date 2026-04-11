@@ -8,6 +8,8 @@ BIN_PATH="${CACHE_BENCH_BIN:-$ROOT/sentinelfind}"
 REPO_PATH="${CACHE_BENCH_REPO:-$ROOT/example}"
 RUNS="${CACHE_BENCH_RUNS:-1}"
 PRESET="${CACHE_BENCH_PRESET:-}"
+MAX_AVG_REAL="${CACHE_BENCH_MAX_AVG_REAL:-}"
+MAX_AVG_EXIT="${CACHE_BENCH_MAX_AVG_EXIT:-}"
 
 if [[ ! -x "$BIN_PATH" ]]; then
   echo "error: sentinelfind binary not found or not executable: $BIN_PATH" >&2
@@ -93,4 +95,17 @@ if [[ "$sum_count" -gt 0 ]]; then
   echo "| aggregate | count | avg exit | avg real(s) | avg user(s) | avg sys(s) | avg output(bytes) |"
   echo "|---|---:|---:|---:|---:|---:|---:|"
   echo "| all patterns | $sum_count | $avg_exit | $avg_real | $avg_user | $avg_sys | $avg_bytes |"
+
+  if [[ -n "$MAX_AVG_REAL" ]]; then
+    if ! awk -v v="$avg_real" -v max="$MAX_AVG_REAL" 'BEGIN{exit !(v <= max)}'; then
+      echo "error: avg real(s) threshold exceeded: $avg_real > $MAX_AVG_REAL" >&2
+      exit 1
+    fi
+  fi
+  if [[ -n "$MAX_AVG_EXIT" ]]; then
+    if ! awk -v v="$avg_exit" -v max="$MAX_AVG_EXIT" 'BEGIN{exit !(v <= max)}'; then
+      echo "error: avg exit threshold exceeded: $avg_exit > $MAX_AVG_EXIT" >&2
+      exit 1
+    fi
+  fi
 fi
