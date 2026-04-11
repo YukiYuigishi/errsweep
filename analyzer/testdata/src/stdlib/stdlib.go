@@ -2,6 +2,7 @@ package stdlib
 
 import (
 	"bufio"
+	"context"
 	"database/sql"
 	"io"
 	"os"
@@ -40,4 +41,8 @@ func ReadLimited(r io.Reader) error { // want `ReadLimited returns sentinels: io
 	buf := make([]byte, 16)
 	_, err := lr.Read(buf)
 	return err
+}
+
+func ContextErr(ctx context.Context) error { // want `ContextErr returns sentinels: context\.Canceled, context\.DeadlineExceeded` ContextErr:`SentinelFact\(context\.Canceled, context\.DeadlineExceeded\)`
+	return ctx.Err()
 }

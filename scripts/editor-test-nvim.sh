@@ -107,9 +107,27 @@ local function get_hover_text()
   return ""
 end
 
+local function lsp_clients_for_buf(bufnr)
+  if vim.lsp.get_clients then
+    return vim.lsp.get_clients({ bufnr = bufnr })
+  end
+  if vim.lsp.buf_get_clients then
+    local by_id = vim.lsp.buf_get_clients(bufnr)
+    local out = {}
+    for _, c in pairs(by_id or {}) do
+      table.insert(out, c)
+    end
+    return out
+  end
+  if vim.lsp.get_active_clients then
+    return vim.lsp.get_active_clients()
+  end
+  return {}
+end
+
 vim.defer_fn(function()
   vim.wait(1500, function()
-    local clients = vim.lsp.get_clients({ bufnr = bufnr })
+    local clients = lsp_clients_for_buf(bufnr)
     if not clients or #clients == 0 then
       return false
     end

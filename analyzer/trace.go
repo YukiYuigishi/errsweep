@@ -305,6 +305,9 @@ func sentinelFromInvoke(call ssa.CallCommon, depth int, ctx *traceCtx) []Sentine
 	if method == nil {
 		return nil
 	}
+	if known, ok := knownInvokeSentinels(ifaceType, method.Name()); ok {
+		return known
+	}
 	concretes := concreteCandidatesForInvoke(call)
 	if len(concretes) == 0 {
 		concretes = lookupImpls(ctx.ifaceImpls, ifaceType)
@@ -366,6 +369,10 @@ func collectInvokeBreakdown(fn *ssa.Function, ctx *traceCtx, qualifier types.Qua
 				continue
 			}
 			ifaceType := call.Call.Value.Type()
+			if _, ok := knownInvokeSentinels(ifaceType, method.Name()); ok {
+				// 具象に依存しない既知 invoke は合算ラインのみ出す。
+				continue
+			}
 			concretes := concreteCandidatesForInvoke(call.Call)
 			if len(concretes) == 0 {
 				concretes = lookupImpls(ctx.ifaceImpls, ifaceType)
@@ -408,6 +415,26 @@ func concreteCandidatesForInvoke(call ssa.CallCommon) []types.Type {
 		}
 	}
 	return dedupConcreteTypes(filtered)
+}
+
+// knownInvokeSentinels は invoke（interface 経由）呼び出しのうち、
+// 具象型に依存せず既知の Sentinel が確定するケースを返す。
+func knownInvokeSentinels(ifaceType types.Type, methodName string) ([]SentinelInfo, bool) {
+	if methodName == "Err" && isContextInterface(ifaceType) {
+		return []SentinelInfo{
+			{PkgPath: "context", Name: "Canceled"},
+			{PkgPath: "context", Name: "DeadlineExceeded"},
+		}, true
+	}
+	return nil, false
+}
+
+func isContextInterface(t types.Type) bool {
+	named, ok := t.(*types.Named)
+	if !ok || named.Obj() == nil || named.Obj().Pkg() == nil {
+		return false
+	}
+	return named.Obj().Pkg().Path() == "context" && named.Obj().Name() == "Context"
 }
 
 // concreteTypesFromInterfaceValue は interface 値を組み立てた SSA を辿って
