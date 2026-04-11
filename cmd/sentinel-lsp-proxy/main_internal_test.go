@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestShouldRefreshCache(t *testing.T) {
 	root := "/workspace"
@@ -61,5 +64,29 @@ func TestURIToWorkspacePath(t *testing.T) {
 	}
 	if _, ok := uriToWorkspacePath("not-a-file-uri", root); ok {
 		t.Fatal("expected non-file URI to be rejected")
+	}
+}
+
+func TestShouldRunRefresh(t *testing.T) {
+	base := time.Unix(100, 0)
+	cases := []struct {
+		name        string
+		now         time.Time
+		last        time.Time
+		minInterval time.Duration
+		want        bool
+	}{
+		{"first run", base, time.Time{}, 2 * time.Second, true},
+		{"disabled interval", base, base, 0, true},
+		{"under interval", base.Add(1500 * time.Millisecond), base, 2 * time.Second, false},
+		{"equal interval", base.Add(2 * time.Second), base, 2 * time.Second, true},
+		{"over interval", base.Add(3 * time.Second), base, 2 * time.Second, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := shouldRunRefresh(tc.now, tc.last, tc.minInterval); got != tc.want {
+				t.Fatalf("shouldRunRefresh(...) = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }

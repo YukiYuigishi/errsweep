@@ -40,6 +40,7 @@ func main() {
 	sentinelfindPath := flag.String("sentinelfind", "sentinelfind", "sentinelfind バイナリのパス")
 	workspace := flag.String("workspace", ".", "解析対象のワークスペースディレクトリ")
 	cacheTimeout := flag.Duration("cache-timeout", 60*time.Second, "sentinelfind キャッシュ構築のタイムアウト")
+	cacheRefreshMinInterval := flag.Duration("cache-refresh-min-interval", 2*time.Second, "キャッシュ再構築の最小間隔")
 	flag.Parse()
 	proxy.SetBuildCacheTimeout(*cacheTimeout)
 	workspaceRoot, err := filepath.Abs(*workspace)
@@ -60,11 +61,17 @@ func main() {
 
 	// 差分再解析: 保存/ファイル変更通知を受けたら debounce してキャッシュを再構築する。
 	go func() {
+		var lastRefreshAttempt time.Time
 		for range refreshCh {
 			time.Sleep(300 * time.Millisecond) // debounce
 			for len(refreshCh) > 0 {
 				<-refreshCh
 			}
+			now := time.Now()
+			if !shouldRunRefresh(now, lastRefreshAttempt, *cacheRefreshMinInterval) {
+				continue
+			}
+			lastRefreshAttempt = now
 			cache, err := cacheLoader(*sentinelfindPath, *workspace)
 			if err != nil {
 				log.Printf("sentinel-lsp-proxy: cache refresh failed: %v", err)
@@ -137,6 +144,13 @@ func main() {
 	if err := gopls.Wait(); err != nil {
 		log.Printf("sentinel-lsp-proxy: gopls exited: %v", err)
 	}
+}
+
+func shouldRunRefresh(now, last time.Time, minInterval time.Duration) bool {
+	if minInterval <= 0 || last.IsZero() {
+		return true
+	}
+	return now.Sub(last) >= minInterval
 }
 
 func shouldRefreshCache(raw []byte, workspaceRoot string) bool {
