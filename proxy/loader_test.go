@@ -7,6 +7,37 @@ import (
 	"time"
 )
 
+// BenchmarkComputeSourceHash はソースハッシュ計算のコストを計測する。
+// ERRSWEEP_BENCH_WORKSPACE に計測対象のワークスペースを指定する。
+// 未指定なら skip。例:
+//
+//	ERRSWEEP_BENCH_WORKSPACE=$PWD/tmp/moby go test -bench=BenchmarkComputeSourceHash \
+//	    -benchtime=5x -run=^$ ./proxy/
+func BenchmarkComputeSourceHash(b *testing.B) {
+	workspace := os.Getenv("ERRSWEEP_BENCH_WORKSPACE")
+	if workspace == "" {
+		b.Skip("set ERRSWEEP_BENCH_WORKSPACE to benchmark")
+	}
+	absWorkspace, err := filepath.Abs(workspace)
+	if err != nil {
+		b.Fatalf("abs: %v", err)
+	}
+	if _, err := os.Stat(absWorkspace); err != nil {
+		b.Fatalf("workspace stat: %v", err)
+	}
+
+	// 初回は warm-up（FS キャッシュを温める）
+	if _, err := computeSourceHash(absWorkspace); err != nil {
+		b.Fatalf("warm-up: %v", err)
+	}
+
+	for b.Loop() {
+		if _, err := computeSourceHash(absWorkspace); err != nil {
+			b.Fatalf("computeSourceHash: %v", err)
+		}
+	}
+}
+
 func TestComputeSourceHash_DetectsChange(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -39,6 +70,48 @@ func TestComputeSourceHash_DetectsChange(t *testing.T) {
 	}
 	if h1 == h2 {
 		t.Fatal("expected hash to change after source edit")
+	}
+}
+
+func TestComputeSourceHash_SkipsNestedModules(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module root\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "a.go"), []byte("package p\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	nested := filepath.Join(dir, "tmp", "vendored")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nested, "go.mod"), []byte("module vendored\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nested, "v.go"), []byte("package v\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	h1, err := computeSourceHash(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// nested module 内を編集してもハッシュは変わらないはず
+	later := time.Now().Add(2 * time.Second)
+	if err := os.WriteFile(filepath.Join(nested, "v.go"), []byte("package v\n// edited\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(filepath.Join(nested, "v.go"), later, later); err != nil {
+		t.Fatal(err)
+	}
+	h2, err := computeSourceHash(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h1 != h2 {
+		t.Fatal("expected nested module edits to be ignored by source hash")
 	}
 }
 

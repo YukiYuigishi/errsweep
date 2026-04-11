@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -122,7 +123,7 @@ func loadValidCache(path string, expected CacheMetadata) (Cache, error) {
 // computeSourceHash は workspace 配下の Go 関連ファイル（.go / go.mod / go.sum / go.work）の
 // 相対パス・サイズ・mtime を sha256 で畳み込んだ値を返す。
 // 別プロセスでキャッシュが共有されたときに「ソースが変わったら無効化」するのが目的。
-// .git / .errsweep / node_modules は走査しない。
+// .git / .errsweep / node_modules および root 以外の go.mod を持つネストモジュールは走査しない。
 func computeSourceHash(workspace string) (string, error) {
 	h := sha256.New()
 	err := filepath.WalkDir(workspace, func(path string, d fs.DirEntry, walkErr error) error {
@@ -133,6 +134,13 @@ func computeSourceHash(workspace string) (string, error) {
 			switch d.Name() {
 			case ".git", ".errsweep", "node_modules":
 				return fs.SkipDir
+			}
+			// ネストした go.mod は別モジュール（sentinelfind ./... の対象外）なので
+			// ハッシュ計算から除外する。root 自身はチェックしない。
+			if path != workspace {
+				if _, err := os.Stat(filepath.Join(path, "go.mod")); err == nil {
+					return fs.SkipDir
+				}
 			}
 			return nil
 		}
