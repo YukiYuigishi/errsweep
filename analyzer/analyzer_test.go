@@ -87,3 +87,32 @@ func TestAnalyzer_RealWorld(t *testing.T) {
 	testdata := analysistest.TestData()
 	analysistest.Run(t, testdata, analyzer.Analyzer, "realworld")
 }
+
+func TestAnalyzer_ThirdParty(t *testing.T) {
+	testdata := analysistest.TestData()
+	analysistest.Run(
+		t,
+		testdata,
+		analyzer.Analyzer,
+		"thirdparty",
+		"github.com/redis/go-redis/v9",
+		"github.com/labstack/echo/v4",
+	)
+}
+
+func TestAnalyzer_ThirdPartyFrameworks(t *testing.T) {
+	testdata := analysistest.TestData()
+	analysistest.Run(
+		t,
+		testdata,
+		analyzer.Analyzer,
+		"thirdpartyframeworks",
+		"github.com/gin-gonic/gin",
+		"google.golang.org/grpc/status",
+		"google.golang.org/grpc/codes",
+		"connectrpc.com/connect",
+		"github.com/sqlc-dev/sqlc",
+		"gorm.io/gorm",
+		"entgo.io/ent",
+	)
+}
