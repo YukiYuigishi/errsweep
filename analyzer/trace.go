@@ -305,7 +305,10 @@ func sentinelFromInvoke(call ssa.CallCommon, depth int, ctx *traceCtx) []Sentine
 	if method == nil {
 		return nil
 	}
-	concretes := lookupImpls(ctx.ifaceImpls, ifaceType)
+	concretes := concreteCandidatesForInvoke(call)
+	if len(concretes) == 0 {
+		concretes = lookupImpls(ctx.ifaceImpls, ifaceType)
+	}
 	if len(concretes) == 0 {
 		return nil
 	}
@@ -363,7 +366,10 @@ func collectInvokeBreakdown(fn *ssa.Function, ctx *traceCtx, qualifier types.Qua
 				continue
 			}
 			ifaceType := call.Call.Value.Type()
-			concretes := lookupImpls(ctx.ifaceImpls, ifaceType)
+			concretes := concreteCandidatesForInvoke(call.Call)
+			if len(concretes) == 0 {
+				concretes = lookupImpls(ctx.ifaceImpls, ifaceType)
+			}
 			for _, ct := range concretes {
 				name := types.TypeString(ct, qualifier)
 				sens := sentinelsForConcreteMethod(ct, method.Name(), ctx)
@@ -372,6 +378,94 @@ func collectInvokeBreakdown(fn *ssa.Function, ctx *traceCtx, qualifier types.Qua
 		}
 	}
 	return bd
+}
+
+// concreteCandidatesForInvoke は invoke 呼び出しの受信値から
+// 実際に流れている具象型候補を抽出する。抽出できない場合は nil を返す。
+func concreteCandidatesForInvoke(call ssa.CallCommon) []types.Type {
+	ifaceUnder, _ := call.Value.Type().Underlying().(*types.Interface)
+	if ifaceUnder == nil {
+		return nil
+	}
+	raw := concreteTypesFromInterfaceValue(call.Value, map[ssa.Value]bool{})
+	if len(raw) == 0 {
+		return nil
+	}
+	var filtered []types.Type
+	for _, t := range raw {
+		if _, ok := t.Underlying().(*types.Interface); ok {
+			continue
+		}
+		if types.Implements(t, ifaceUnder) {
+			filtered = append(filtered, t)
+			continue
+		}
+		if named, ok := t.(*types.Named); ok {
+			ptr := types.NewPointer(named)
+			if types.Implements(ptr, ifaceUnder) {
+				filtered = append(filtered, ptr)
+			}
+		}
+	}
+	return dedupConcreteTypes(filtered)
+}
+
+// concreteTypesFromInterfaceValue は interface 値を組み立てた SSA を辿って
+// 到達可能な具象型を集める。
+func concreteTypesFromInterfaceValue(v ssa.Value, visited map[ssa.Value]bool) []types.Type {
+	if v == nil || visited[v] {
+		return nil
+	}
+	visited[v] = true
+
+	switch x := v.(type) {
+	case *ssa.MakeInterface:
+		return []types.Type{x.X.Type()}
+	case *ssa.ChangeInterface:
+		return concreteTypesFromInterfaceValue(x.X, visited)
+	case *ssa.Phi:
+		var out []types.Type
+		for _, edge := range x.Edges {
+			out = append(out, concreteTypesFromInterfaceValue(edge, visited)...)
+		}
+		return dedupConcreteTypes(out)
+	case *ssa.UnOp:
+		if x.Op != token.MUL {
+			return nil
+		}
+		alloc, ok := x.X.(*ssa.Alloc)
+		if !ok || alloc.Referrers() == nil {
+			return nil
+		}
+		var out []types.Type
+		for _, ref := range *alloc.Referrers() {
+			store, ok := ref.(*ssa.Store)
+			if !ok || store.Addr != alloc {
+				continue
+			}
+			out = append(out, concreteTypesFromInterfaceValue(store.Val, visited)...)
+		}
+		return dedupConcreteTypes(out)
+	default:
+		return nil
+	}
+}
+
+func dedupConcreteTypes(src []types.Type) []types.Type {
+	var out []types.Type
+	for _, t := range src {
+		dup := false
+		for _, kept := range out {
+			if types.Identical(t, kept) {
+				dup = true
+				break
+			}
+		}
+		if !dup {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // knownMethodSentinels は concreteType.methodName を known.go の形式キーで検索する。

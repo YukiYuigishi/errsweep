@@ -77,3 +77,8 @@ func TestAnalyzer_IfaceExternal(t *testing.T) {
 	testdata := analysistest.TestData()
 	analysistest.Run(t, testdata, analyzer.Analyzer, "ifaceexternal", "ifacecallee", "ifacecallerext")
 }
+
+func TestAnalyzer_IfaceParamFlow(t *testing.T) {
+	testdata := analysistest.TestData()
+	analysistest.Run(t, testdata, analyzer.Analyzer, "ifaceparam")
+}
