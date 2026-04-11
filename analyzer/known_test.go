@@ -63,6 +63,7 @@ func TestKnownErrorMapCoverage(t *testing.T) {
 		{"(*database/sql.NullString).Scan", "sql.ErrNoRows"},
 		{"(*net/http.Request).Cookie", "http.ErrNoCookie"},
 		{"(*net/http.Request).FormFile", "http.ErrMissingFile"},
+		{"(*net/http.Server).Serve", "http.ErrServerClosed"},
 		{"(*net.TCPListener).Accept", "net.ErrClosed"},
 	}
 	for _, tc := range cases {

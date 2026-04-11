@@ -53,6 +53,7 @@ var knownErrorMap = map[string][]SentinelInfo{
 	"(*net/http.Request).Cookie":   {{PkgPath: "net/http", Name: "ErrNoCookie"}},
 	"(*net/http.Request).FormFile": {{PkgPath: "net/http", Name: "ErrMissingFile"}},
 	"net/http.ReadRequest":         {{PkgPath: "io", Name: "EOF"}},
+	"(*net/http.Server).Serve":     {{PkgPath: "net/http", Name: "ErrServerClosed"}},
 
 	// net: close 後の listener 操作で返りうる sentinel
 	"(*net.TCPListener).Accept": {{PkgPath: "net", Name: "ErrClosed"}},

@@ -88,3 +88,7 @@ func AcceptTCP(ln *net.TCPListener) error { // want `AcceptTCP returns sentinels
 	_, err := ln.Accept()
 	return err
 }
+
+func ServeHTTPServer(s *http.Server, ln net.Listener) error { // want `ServeHTTPServer returns sentinels: http\.ErrServerClosed` ServeHTTPServer:`SentinelFact\(http\.ErrServerClosed\)`
+	return s.Serve(ln)
+}
