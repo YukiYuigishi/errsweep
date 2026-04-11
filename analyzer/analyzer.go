@@ -1,7 +1,6 @@
 package analyzer
 
 import (
-	"fmt"
 	"go/token"
 	"go/types"
 	"sort"
@@ -181,18 +180,4 @@ func funcPos(fn *ssa.Function) token.Pos {
 		return fn.Syntax().Pos()
 	}
 	return token.NoPos
-}
-
-// sentinel の String 形式を生成するヘルパー（テスト用）
-func sentinelString(s SentinelInfo) string {
-	return fmt.Sprintf("%s.%s", pkgName(s.PkgPath), s.Name)
-}
-
-func pkgName(pkgPath string) string {
-	for i := len(pkgPath) - 1; i >= 0; i-- {
-		if pkgPath[i] == '/' {
-			return pkgPath[i+1:]
-		}
-	}
-	return pkgPath
 }

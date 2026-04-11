@@ -4,6 +4,9 @@ run:
 linters:
   disable-all: true
   enable:
+    - errcheck
     - gofmt
+    - gosimple
     - govet
     - ineffassign
+    - unused

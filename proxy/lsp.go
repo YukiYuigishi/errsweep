@@ -80,9 +80,6 @@ func (m *Message) isRequest() bool { return m.Method != "" && len(m.ID) > 0 }
 // isResponse は JSON-RPC レスポンス（id のみ、method なし）かを判定する。
 func (m *Message) isResponse() bool { return m.Method == "" && len(m.ID) > 0 }
 
-// isNotification は通知（id なし）かを判定する。
-func (m *Message) isNotification() bool { return m.Method != "" && len(m.ID) == 0 }
-
 // parseMessage は raw JSON を Message にデコードする。
 func parseMessage(raw []byte) (*Message, error) {
 	var msg Message

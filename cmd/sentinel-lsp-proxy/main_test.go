@@ -94,8 +94,12 @@ func TestE2E_HoverSentinelAppended(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		stdin.Close()
-		cmd.Wait()
+		if err := stdin.Close(); err != nil {
+			t.Logf("stdin close: %v", err)
+		}
+		if err := cmd.Wait(); err != nil {
+			t.Logf("wait: %v", err)
+		}
 	})
 
 	// hover リクエストを送信（usecase/user.go の GetUser: line 9, 0-indexed=8）
@@ -168,8 +172,12 @@ func TestE2E_HoverNoEntry(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		stdin.Close()
-		cmd.Wait()
+		if err := stdin.Close(); err != nil {
+			t.Logf("stdin close: %v", err)
+		}
+		if err := cmd.Wait(); err != nil {
+			t.Logf("wait: %v", err)
+		}
 	})
 
 	// sentinel のない行（line 1: package 宣言）に hover
