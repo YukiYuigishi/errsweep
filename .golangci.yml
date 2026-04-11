@@ -7,6 +7,18 @@ linters:
     - errcheck
     - gofmt
     - gosimple
+    - gosec
     - govet
     - ineffassign
+    - intrange
+    - errchkjson
+    - forcetypeassert
+    - misspell
+    - nonamedreturns
+    - predeclared
+    - revive
+    - staticcheck
+    - unconvert
     - unused
+    - errorlint
+    - wrapcheck

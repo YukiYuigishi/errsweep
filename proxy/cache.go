@@ -246,7 +246,7 @@ func decodeDiagnostics(raw json.RawMessage) ([]diagnostic, error) {
 }
 
 // parsePosn は "path/to/file.go:8:6" を (file, line, nil) に分解する。
-func parsePosn(posn string) (file string, line int, err error) {
+func parsePosn(posn string) (string, int, error) {
 	// 最後の2つの ":N" を取り除く
 	last := strings.LastIndex(posn, ":")
 	if last < 0 {
@@ -271,14 +271,16 @@ func parsePosn(posn string) (file string, line int, err error) {
 //	"FuncName returns sentinels via *pkg.Concrete: a, b, c"    → concrete="*pkg.Concrete"
 //
 // per-concrete で sentinel が無い場合は "(none)" が入るので空扱いにする。
-func parseDiagMessage(msg string) (funcName, concrete string, sentinels []string, err error) {
+func parseDiagMessage(msg string) (string, string, []string, error) {
 	const marker = " returns sentinels"
 	idx := strings.Index(msg, marker)
 	if idx < 0 {
 		return "", "", nil, fmt.Errorf("parseMessage: marker not found in %q", msg)
 	}
-	funcName = msg[:idx]
+	funcName := msg[:idx]
 	rest := msg[idx+len(marker):]
+	concrete := ""
+	sentinels := make([]string, 0, 2)
 	switch {
 	case strings.HasPrefix(rest, " via "):
 		rest = rest[len(" via "):]

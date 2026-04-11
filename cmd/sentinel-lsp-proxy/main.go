@@ -17,6 +17,7 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"flag"
 	"io"
 	"log"
@@ -49,6 +50,7 @@ func main() {
 	p := proxy.NewProxy(cache)
 
 	// gopls を子プロセスとして起動
+	// #nosec G204 -- goplsPath/goplsSubArgs はローカル開発者が明示指定するツール実行用引数。
 	gopls := exec.Command(*goplsPath, goplsSubArgs...)
 	goplsIn, err := gopls.StdinPipe()
 	if err != nil {
@@ -69,7 +71,7 @@ func main() {
 		for {
 			raw, err := proxy.ReadMessage(editorReader)
 			if err != nil {
-				if err != io.EOF {
+				if !errors.Is(err, io.EOF) {
 					log.Printf("sentinel-lsp-proxy: read from editor: %v", err)
 				}
 				goplsIn.Close()
@@ -90,7 +92,7 @@ func main() {
 	for {
 		raw, err := proxy.ReadMessage(goplsReader)
 		if err != nil {
-			if err != io.EOF {
+			if !errors.Is(err, io.EOF) {
 				log.Printf("sentinel-lsp-proxy: read from gopls: %v", err)
 			}
 			break

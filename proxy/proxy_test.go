@@ -10,7 +10,7 @@ import (
 )
 
 // hoverResponse は textDocument/hover の典型的なレスポンス。
-func hoverResponse(id int, file string, line int, contents string) []byte {
+func hoverResponse(id int, _ string, line int, contents string) []byte {
 	resp := map[string]interface{}{
 		"jsonrpc": "2.0",
 		"id":      id,
@@ -25,7 +25,10 @@ func hoverResponse(id int, file string, line int, contents string) []byte {
 			},
 		},
 	}
-	b, _ := json.Marshal(resp)
+	b, err := json.Marshal(resp)
+	if err != nil {
+		panic(err)
+	}
 	return b
 }
 
@@ -40,7 +43,10 @@ func hoverRequest(id int, file string, line, char int) []byte {
 			"position":     map[string]interface{}{"line": line - 1, "character": char},
 		},
 	}
-	b, _ := json.Marshal(req)
+	b, err := json.Marshal(req)
+	if err != nil {
+		panic(err)
+	}
 	return b
 }
 
@@ -206,7 +212,10 @@ func TestProxy_HoverStringContents(t *testing.T) {
 			"contents": "func Do() error",
 		},
 	}
-	respBody, _ := json.Marshal(resp)
+	respBody, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	var out bytes.Buffer
 	if err := p.processServerMessage(respBody, &out); err != nil {

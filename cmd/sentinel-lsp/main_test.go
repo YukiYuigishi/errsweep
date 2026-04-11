@@ -49,7 +49,10 @@ func TestServer_Initialize(t *testing.T) {
 		"method":  "initialize",
 		"params":  map[string]interface{}{},
 	}
-	reqBody, _ := json.Marshal(req)
+	reqBody, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal initialize request: %v", err)
+	}
 
 	out := runOne(t, s, reqBody)
 	resp := readResponse(t, out)
@@ -95,7 +98,10 @@ func TestServer_HoverHit(t *testing.T) {
 			"position":     map[string]interface{}{"line": 4, "character": 0}, // 0-indexed → line 5
 		},
 	}
-	reqBody, _ := json.Marshal(hoverReq)
+	reqBody, err := json.Marshal(hoverReq)
+	if err != nil {
+		t.Fatalf("marshal hover request: %v", err)
+	}
 
 	out := runOne(t, s, reqBody)
 	resp := readResponse(t, out)
@@ -133,7 +139,10 @@ func TestServer_HoverMiss(t *testing.T) {
 			"position":     map[string]interface{}{"line": 0, "character": 0},
 		},
 	}
-	reqBody, _ := json.Marshal(hoverReq)
+	reqBody, err := json.Marshal(hoverReq)
+	if err != nil {
+		t.Fatalf("marshal hover miss request: %v", err)
+	}
 
 	out := runOne(t, s, reqBody)
 	resp := readResponse(t, out)
@@ -153,7 +162,10 @@ func TestServer_UnknownMethod(t *testing.T) {
 		"method":  "textDocument/completion",
 		"params":  map[string]interface{}{},
 	}
-	reqBody, _ := json.Marshal(req)
+	reqBody, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal unknown request: %v", err)
+	}
 
 	out := runOne(t, s, reqBody)
 	resp := readResponse(t, out)

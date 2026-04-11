@@ -144,7 +144,7 @@ func (p *Proxy) processServerMessage(raw []byte, w io.Writer) error {
 func appendSentinelToHover(raw []byte, entry *CacheEntry) ([]byte, error) {
 	var resp map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &resp); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("appendSentinelToHover: unmarshal response: %w", err)
 	}
 	resultRaw, ok := resp["result"]
 	if !ok {
@@ -153,7 +153,7 @@ func appendSentinelToHover(raw []byte, entry *CacheEntry) ([]byte, error) {
 
 	var result map[string]json.RawMessage
 	if err := json.Unmarshal(resultRaw, &result); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("appendSentinelToHover: unmarshal result: %w", err)
 	}
 
 	contentsRaw, ok := result["contents"]
@@ -173,30 +173,34 @@ func appendSentinelToHover(raw []byte, entry *CacheEntry) ([]byte, error) {
 		markup.Value += "\n" + addition
 		newContents, err := json.Marshal(markup)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("appendSentinelToHover: marshal markup contents: %w", err)
 		}
 		result["contents"] = newContents
 	} else {
 		// 文字列形式
 		var s string
 		if err := json.Unmarshal(contentsRaw, &s); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("appendSentinelToHover: unmarshal string contents: %w", err)
 		}
 		s += "\n" + addition
 		newContents, err := json.Marshal(s)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("appendSentinelToHover: marshal string contents: %w", err)
 		}
 		result["contents"] = newContents
 	}
 
 	newResult, err := json.Marshal(result)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("appendSentinelToHover: marshal result: %w", err)
 	}
 	resp["result"] = newResult
 
-	return json.Marshal(resp)
+	b, err := json.Marshal(resp)
+	if err != nil {
+		return nil, fmt.Errorf("appendSentinelToHover: marshal response: %w", err)
+	}
+	return b, nil
 }
 
 // funcNameRe は gopls のホバーレスポンスから関数情報を抽出する正規表現。
@@ -208,7 +212,7 @@ var funcNameRe = regexp.MustCompile(`\bfunc\s+(?:\(\w+\s+(\*?\w+)\)\s+)?(\w+)\s*
 // SSA スタイル名（"(*T).Method" 形式、メソッドの場合のみ）と単純名を返す。
 // SSA は fn.Name() でメソッドを "(*T).Method" と命名するため、キャッシュ検索は
 // SSA スタイル名を優先し、見つからない場合は単純名にフォールバックする。
-func extractFuncNamesFromResult(result json.RawMessage) (ssaName, simpleName string) {
+func extractFuncNamesFromResult(result json.RawMessage) (string, string) {
 	var r struct {
 		Contents json.RawMessage `json:"contents"`
 	}
@@ -232,6 +236,7 @@ func extractFuncNamesFromResult(result json.RawMessage) (ssaName, simpleName str
 		return "", ""
 	}
 	receiver, name := m[1], m[2]
+	ssaName := ""
 	if receiver != "" {
 		// "(*T).Method" または "(T).Method" の形式で SSA スタイル名を組み立てる
 		ssaName = "(" + receiver + ")." + name

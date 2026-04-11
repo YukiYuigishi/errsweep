@@ -2,6 +2,7 @@ package main_test
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -40,19 +41,20 @@ func samplePkg(t *testing.T) string {
 	return abs
 }
 
-func run(t *testing.T, args ...string) (stdout string, exitCode int) {
+func run(t *testing.T, args ...string) (string, int) {
 	t.Helper()
 	cmd := exec.Command(binPath, args...)
 	out, err := cmd.CombinedOutput()
-	stdout = string(out)
+	stdout := string(out)
 	if err == nil {
 		return stdout, 0
 	}
-	if ee, ok := err.(*exec.ExitError); ok {
+	var ee *exec.ExitError
+	if errors.As(err, &ee) {
 		return stdout, ee.ExitCode()
 	}
 	t.Fatalf("unexpected error: %v", err)
-	return
+	return "", 1
 }
 
 // TestFlag_Default は何もフラグを付けない場合に診断が出力され exit 3 になることを確認する。

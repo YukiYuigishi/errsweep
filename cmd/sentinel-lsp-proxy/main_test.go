@@ -38,6 +38,7 @@ func TestMain(m *testing.M) {
 		{sentinelfindBin, "github.com/YukiYuigishi/errsweep/cmd/sentinelfind"},
 		{dummyGoplsBin, "github.com/YukiYuigishi/errsweep/cmd/sentinel-lsp-proxy/testdata/dummy-gopls"},
 	} {
+		// #nosec G204 -- テスト内で固定のビルド対象を指定している。
 		if out, err := exec.Command("go", "build", "-o", target.bin, target.pkg).CombinedOutput(); err != nil {
 			panic("build failed (" + target.pkg + "): " + string(out))
 		}

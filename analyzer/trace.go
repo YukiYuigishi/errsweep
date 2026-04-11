@@ -176,7 +176,7 @@ func customErrorType(t types.Type) (*SentinelInfo, bool) {
 	if !ok {
 		return nil, false
 	}
-	check := types.Type(elem)
+	check := elem
 	if pointer {
 		check = types.NewPointer(elem)
 	}
@@ -482,13 +482,17 @@ func funcFromSSAValue(v ssa.Value) *ssa.Function {
 
 // isErrorType は型が error インターフェースかを判定する。
 func isErrorType(t types.Type) bool {
+	errorIface, okErr := types.Universe.Lookup("error").Type().Underlying().(*types.Interface)
+	if !okErr {
+		return false
+	}
 	named, ok := t.(*types.Named)
 	if !ok {
 		iface, ok2 := t.Underlying().(*types.Interface)
 		return ok2 && iface.NumMethods() == 1 && iface.Method(0).Name() == "Error"
 	}
 	_ = named
-	return types.Implements(t, types.Universe.Lookup("error").Type().Underlying().(*types.Interface))
+	return types.Implements(t, errorIface)
 }
 
 // appendUniq は重複なく SentinelInfo を追加する。

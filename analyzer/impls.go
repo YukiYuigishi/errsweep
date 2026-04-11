@@ -15,7 +15,7 @@ type ifaceImpl struct {
 	concrete types.Type // *T または T
 }
 
-// BuildInterfaceImpls は pass のファイル・スコープ・インポートを走査し、
+// buildInterfaceImpls は pass のファイル・スコープ・インポートを走査し、
 // インターフェース → 具象型のマップを構築する。
 //
 // 収集経路は 2 つ:
@@ -24,7 +24,7 @@ type ifaceImpl struct {
 //
 // (1) は明示的な DI ヒント、(2) は assertion を書き忘れた具象でも
 // 解析対象に含められるようにするための補完経路。
-func BuildInterfaceImpls(pass *analysis.Pass) []ifaceImpl {
+func buildInterfaceImpls(pass *analysis.Pass) []ifaceImpl {
 	impls := implsFromAssertions(pass)
 	impls = append(impls, implsFromAutoDiscovery(pass)...)
 	return dedupImpls(impls)

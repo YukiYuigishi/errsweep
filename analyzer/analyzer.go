@@ -1,6 +1,7 @@
 package analyzer
 
 import (
+	"fmt"
 	"go/token"
 	"go/types"
 	"sort"
@@ -21,14 +22,17 @@ var Analyzer = &analysis.Analyzer{
 }
 
 func run(pass *analysis.Pass) (interface{}, error) {
-	ssaResult := pass.ResultOf[buildssa.Analyzer].(*buildssa.SSA)
+	ssaResult, ok := pass.ResultOf[buildssa.Analyzer].(*buildssa.SSA)
+	if !ok || ssaResult == nil {
+		return nil, fmt.Errorf("run: missing buildssa result")
+	}
 
 	// var f FuncType = ConcreteFunc パターンのグローバル関数変数マップを事前構築（DI 解決用）
 	globalFuncs := BuildGlobalFuncMap(ssaResult.SrcFuncs, ssaResult.Pkg)
 
 	// var _ Iface = (*Concrete)(nil) の compile-time assertion から
 	// インターフェース → 具象型のマップを構築（interface DI 解決用）
-	ifaceImpls := BuildInterfaceImpls(pass)
+	ifaceImpls := buildInterfaceImpls(pass)
 
 	for _, fn := range ssaResult.SrcFuncs {
 		if fn.Blocks == nil {
@@ -155,7 +159,7 @@ func qualifierFor(pkg *types.Package) types.Qualifier {
 func returnsError(sig *types.Signature) bool {
 	results := sig.Results()
 	errorIface := types.Universe.Lookup("error").Type()
-	for i := 0; i < results.Len(); i++ {
+	for i := range results.Len() {
 		if types.Identical(results.At(i).Type(), errorIface) {
 			return true
 		}
@@ -164,7 +168,7 @@ func returnsError(sig *types.Signature) bool {
 }
 
 // findFuncObject は SSA 関数に対応する types.Object を返す。
-func findFuncObject(pass *analysis.Pass, fn *ssa.Function) types.Object {
+func findFuncObject(_ *analysis.Pass, fn *ssa.Function) types.Object {
 	if fn.Object() != nil {
 		return fn.Object()
 	}

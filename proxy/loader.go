@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"time"
@@ -31,12 +32,12 @@ func BuildCache(sentinelfindPath, workspace string) (Cache, error) {
 	cmd.Dir = workspace
 	out, err := cmd.Output()
 	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			return NewCache(), fmt.Errorf("BuildCache: sentinelfind timeout after %s (workspace=%s)", buildCacheTimeout, workspace)
 		}
-		if ee, ok := err.(*exec.ExitError); ok && ee.ExitCode() == 3 {
-			// exit code 3 (diagnostics found) は正常
-		} else if len(out) == 0 {
+		// exit code 3 (diagnostics found) は正常
+		var ee *exec.ExitError
+		if !(errors.As(err, &ee) && ee.ExitCode() == 3) && len(out) == 0 {
 			return NewCache(), fmt.Errorf("BuildCache: %w (workspace=%s)", err, workspace)
 		}
 	}

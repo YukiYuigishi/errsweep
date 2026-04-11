@@ -13,6 +13,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -69,7 +70,7 @@ func (s *server) run(r io.Reader, w io.Writer) {
 	for {
 		raw, err := proxy.ReadMessage(br)
 		if err != nil {
-			if err != io.EOF {
+			if !errors.Is(err, io.EOF) {
 				log.Printf("sentinel-lsp: read: %v", err)
 			}
 			return
@@ -97,7 +98,7 @@ func (s *server) run(r io.Reader, w io.Writer) {
 }
 
 // handleNotif は通知を処理する。true を返すとサーバーを終了する。
-func (s *server) handleNotif(method string) (exit bool) {
+func (s *server) handleNotif(method string) bool {
 	switch method {
 	case "exit":
 		code := 1
@@ -183,7 +184,10 @@ func (s *server) reply(w io.Writer, id json.RawMessage, result interface{}, rpcE
 	if err != nil {
 		return fmt.Errorf("reply marshal: %w", err)
 	}
-	return proxy.WriteMessage(w, body)
+	if err := proxy.WriteMessage(w, body); err != nil {
+		return fmt.Errorf("reply write: %w", err)
+	}
+	return nil
 }
 
 // uriToPath は file:// URI をファイルパスに変換する。

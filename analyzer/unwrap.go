@@ -81,7 +81,11 @@ func extractSliceElement(sliceVal ssa.Value, index int) ssa.Value {
 		if idxConst.Value == nil || idxConst.Value.Kind() != constant.Int {
 			continue
 		}
-		if int(constant.Val(idxConst.Value).(int64)) != index {
+		idxVal, ok := constant.Val(idxConst.Value).(int64)
+		if !ok {
+			continue
+		}
+		if int(idxVal) != index {
 			continue
 		}
 		// この IndexAddr への Store を探す
