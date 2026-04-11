@@ -28,6 +28,11 @@ func TestAnalyzer_NilReturn(t *testing.T) {
 	analysistest.Run(t, testdata, analyzer.Analyzer, "nilreturn")
 }
 
+func TestAnalyzer_Deferred(t *testing.T) {
+	testdata := analysistest.TestData()
+	analysistest.Run(t, testdata, analyzer.Analyzer, "deferred")
+}
+
 func TestAnalyzer_Opaque(t *testing.T) {
 	testdata := analysistest.TestData()
 	analysistest.Run(t, testdata, analyzer.Analyzer, "opaque")

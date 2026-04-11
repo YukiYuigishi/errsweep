@@ -23,7 +23,7 @@ type traceCtx struct {
 }
 
 // traceValue は SSA値 v から後方に探索し、到達しうる Sentinel Error を返す。
-// handled: Return, Global, Call, Phi, MakeInterface, ChangeInterface, UnOp, Extract, Const(nil)
+// handled: Return, Global, Call, Phi, MakeInterface, ChangeInterface, UnOp, Alloc(via stores), Extract, Const(nil)
 func traceValue(v ssa.Value, depth int, ctx *traceCtx) []SentinelInfo {
 	if depth > maxTraceDepth {
 		return nil
@@ -40,6 +40,11 @@ func traceValue(v ssa.Value, depth int, ctx *traceCtx) []SentinelInfo {
 		if x.Op == token.MUL {
 			if g, ok := x.X.(*ssa.Global); ok {
 				return sentinelFromGlobal(g)
+			}
+			// defer + rundefers が絡むと named-return 風に *ssa.Alloc へ一度 Store してから
+			// reload した値が返される。Alloc への全 Store を遡って辿る。
+			if alloc, ok := x.X.(*ssa.Alloc); ok {
+				return traceAllocStores(alloc, depth, ctx)
 			}
 		}
 		return traceValue(x.X, depth+1, ctx)
@@ -99,6 +104,25 @@ func traceValue(v ssa.Value, depth int, ctx *traceCtx) []SentinelInfo {
 	default:
 		return nil
 	}
+}
+
+// traceAllocStores は *ssa.Alloc に書き込まれた全ての値を後方に辿る。
+// 主に defer + rundefers による named-return 風の Store → rundefers → Load パターンで、
+// 直前に Store された sentinel を拾い上げるために使う。
+func traceAllocStores(alloc *ssa.Alloc, depth int, ctx *traceCtx) []SentinelInfo {
+	refs := alloc.Referrers()
+	if refs == nil {
+		return nil
+	}
+	var result []SentinelInfo
+	for _, ref := range *refs {
+		store, ok := ref.(*ssa.Store)
+		if !ok || store.Addr != alloc {
+			continue
+		}
+		result = appendUniq(result, traceValue(store.Val, depth+1, ctx))
+	}
+	return result
 }
 
 // sentinelFromGlobal はグローバル変数がパッケージレベルの Sentinel 宣言かを判定する。
