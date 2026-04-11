@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"io"
+	"net/http"
 	"os"
 )
 
@@ -50,5 +51,15 @@ func ContextErr(ctx context.Context) error { // want `ContextErr returns sentine
 func ReaderInvoke(r io.Reader) error { // want `ReaderInvoke returns sentinels: io\.EOF` ReaderInvoke:`SentinelFact\(io\.EOF\)`
 	buf := make([]byte, 1)
 	_, err := r.Read(buf)
+	return err
+}
+
+func RequestCookie(r *http.Request) error { // want `RequestCookie returns sentinels: http\.ErrNoCookie` RequestCookie:`SentinelFact\(http\.ErrNoCookie\)`
+	_, err := r.Cookie("session")
+	return err
+}
+
+func RequestFormFile(r *http.Request) error { // want `RequestFormFile returns sentinels: http\.ErrMissingFile` RequestFormFile:`SentinelFact\(http\.ErrMissingFile\)`
+	_, _, err := r.FormFile("avatar")
 	return err
 }

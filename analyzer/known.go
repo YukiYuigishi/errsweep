@@ -32,4 +32,8 @@ var knownErrorMap = map[string][]SentinelInfo{
 	// database/sql: 行が存在しない場合に ErrNoRows を返す
 	"(*database/sql.Row).Scan": {{PkgPath: "database/sql", Name: "ErrNoRows"}},
 	"(*database/sql.Row).Err":  {{PkgPath: "database/sql", Name: "ErrNoRows"}},
+
+	// net/http: リクエスト補助APIで返りうる sentinel
+	"(*net/http.Request).Cookie":   {{PkgPath: "net/http", Name: "ErrNoCookie"}},
+	"(*net/http.Request).FormFile": {{PkgPath: "net/http", Name: "ErrMissingFile"}},
 }
