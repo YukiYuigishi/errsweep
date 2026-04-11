@@ -82,16 +82,18 @@ func run(pass *analysis.Pass) (interface{}, error) {
 		// 具象が複数ある場合は concrete ごとに報告
 		if len(breakdown.byConcrete) > 1 {
 			concretes := make([]string, 0, len(breakdown.byConcrete))
-			for c := range breakdown.byConcrete {
+			for c, sens := range breakdown.byConcrete {
+				if len(sens) == 0 {
+					continue
+				}
 				concretes = append(concretes, c)
+			}
+			if len(concretes) <= 1 {
+				continue
 			}
 			sort.Strings(concretes)
 			for _, c := range concretes {
 				sens := breakdown.byConcrete[c]
-				if len(sens) == 0 {
-					pass.Reportf(pos, "%s returns sentinels via %s: (none)", fn.Name(), c)
-					continue
-				}
 				strs := make([]string, len(sens))
 				for i, s := range sens {
 					strs[i] = s.String()
