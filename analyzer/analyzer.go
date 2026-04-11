@@ -30,9 +30,12 @@ func run(pass *analysis.Pass) (interface{}, error) {
 	// var f FuncType = ConcreteFunc パターンのグローバル関数変数マップを事前構築（DI 解決用）
 	globalFuncs := BuildGlobalFuncMap(ssaResult.SrcFuncs, ssaResult.Pkg)
 
+	// RTA で実行時に到達しうる具象型を収集し、interface 実装候補の過剰推論を抑える。
+	runtimeTypes := collectRuntimeConcreteTypes(ssaResult.SrcFuncs, ssaResult.Pkg)
+
 	// var _ Iface = (*Concrete)(nil) の compile-time assertion から
 	// インターフェース → 具象型のマップを構築（interface DI 解決用）
-	ifaceImpls := buildInterfaceImpls(pass)
+	ifaceImpls := buildInterfaceImpls(pass, runtimeTypes)
 
 	for _, fn := range ssaResult.SrcFuncs {
 		if fn.Blocks == nil {

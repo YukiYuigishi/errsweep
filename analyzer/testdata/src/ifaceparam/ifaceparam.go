@@ -32,7 +32,7 @@ func Select(flag bool) Finder {
 	return repoB{}
 }
 
-func Run(flag bool) error { // want `Run returns sentinels: ifaceparam\.ErrA, ifaceparam\.ErrB` `Run returns sentinels via repoA: ifaceparam\.ErrA` `Run returns sentinels via repoB: ifaceparam\.ErrB` Run:`SentinelFact\(ifaceparam\.ErrA, ifaceparam\.ErrB\)`
+func Run(flag bool) error { // want `Run returns sentinels: ifaceparam\.ErrA, ifaceparam\.ErrB` `Run returns sentinels via repoA: ifaceparam\.ErrA` `Run returns sentinels via repoB: ifaceparam\.ErrB` `Run returns sentinels via \*repoA: ifaceparam\.ErrA` `Run returns sentinels via \*repoB: ifaceparam\.ErrB` Run:`SentinelFact\(ifaceparam\.ErrA, ifaceparam\.ErrB\)`
 	f := Select(flag)
 	return f.Find()
 }

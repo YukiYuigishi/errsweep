@@ -24,9 +24,9 @@ type ifaceImpl struct {
 //
 // (1) は明示的な DI ヒント、(2) は assertion を書き忘れた具象でも
 // 解析対象に含められるようにするための補完経路。
-func buildInterfaceImpls(pass *analysis.Pass) []ifaceImpl {
+func buildInterfaceImpls(pass *analysis.Pass, runtimeTypes []types.Type) []ifaceImpl {
 	impls := implsFromAssertions(pass)
-	impls = append(impls, implsFromAutoDiscovery(pass)...)
+	impls = append(impls, implsFromAutoDiscovery(pass, runtimeTypes)...)
 	return dedupImpls(impls)
 }
 
@@ -84,12 +84,12 @@ func implsFromAssertions(pass *analysis.Pass) []ifaceImpl {
 // 具象候補: pass.Pkg 自身と pass.Pkg.Imports() のスコープ直下の named 型
 // （インターフェース型は除外）。メソッド集合がポインタレシーバを含む場合は
 // *T 形式で登録する。
-func implsFromAutoDiscovery(pass *analysis.Pass) []ifaceImpl {
+func implsFromAutoDiscovery(pass *analysis.Pass, runtimeTypes []types.Type) []ifaceImpl {
 	ifaces := collectInterfaces(pass.Pkg)
 	if len(ifaces) == 0 {
 		return nil
 	}
-	candidates := collectConcreteCandidates(pass.Pkg)
+	candidates := collectConcreteCandidates(pass.Pkg, runtimeTypes)
 	if len(candidates) == 0 {
 		return nil
 	}
@@ -155,7 +155,10 @@ func collectInterfaces(pkg *types.Package) []types.Type {
 
 // collectConcreteCandidates は pkg 自身と直接インポート先のスコープから、
 // 具象型候補（interface 以外の named 型）を集める。
-func collectConcreteCandidates(pkg *types.Package) []types.Type {
+func collectConcreteCandidates(pkg *types.Package, runtimeTypes []types.Type) []types.Type {
+	if len(runtimeTypes) > 0 {
+		return dedupConcreteTypes(runtimeTypes)
+	}
 	if pkg == nil {
 		return nil
 	}
