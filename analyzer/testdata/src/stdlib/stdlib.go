@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"io"
+	"net"
 	"net/http"
 	"os"
 )
@@ -80,5 +81,10 @@ func ScanNullString(v *sql.NullString) error { // want `ScanNullString returns s
 
 func ReadHTTPRequest(br *bufio.Reader) error { // want `ReadHTTPRequest returns sentinels: io\.EOF` ReadHTTPRequest:`SentinelFact\(io\.EOF\)`
 	_, err := http.ReadRequest(br)
+	return err
+}
+
+func AcceptTCP(ln *net.TCPListener) error { // want `AcceptTCP returns sentinels: net\.ErrClosed` AcceptTCP:`SentinelFact\(net\.ErrClosed\)`
+	_, err := ln.Accept()
 	return err
 }
