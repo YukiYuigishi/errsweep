@@ -240,7 +240,9 @@ func TestExtractFuncName(t *testing.T) {
 		wantName     string
 	}{
 		{"```go\nfunc FindUser(id int) error\n```", "", "FindUser"},
+		{"```go\nfunc repository.ResolveTagID(ctx context.Context, db *sql.DB, name string) (int64, error)\n```", "", "ResolveTagID"},
 		{"```go\nfunc (r *Repo) FindByID(id int) error\n```", "*Repo", "FindByID"},
+		{"```go\nfunc (r *repository.Repo) FindByID(id int) error\n```", "*repository.Repo", "FindByID"},
 		{"```go\nfunc (r *UserRepository) Create(u User) error\n```", "*UserRepository", "Create"},
 		{"```go\nfunc Fetch[T any](id T) (T, error)\n```", "", "Fetch"},
 		{"no function here", "", ""},

@@ -205,8 +205,10 @@ func appendSentinelToHover(raw []byte, entry *CacheEntry) ([]byte, error) {
 
 // funcNameRe は gopls のホバーレスポンスから関数情報を抽出する正規表現。
 // "func FindUser(" → m[1]="", m[2]="FindUser"
+// "func repository.FindUser(" → m[1]="", m[2]="FindUser"
 // "func (r *Repo) FindUser(" → m[1]="*Repo", m[2]="FindUser"
-var funcNameRe = regexp.MustCompile(`\bfunc\s+(?:\(\w+\s+(\*?\w+)\)\s+)?(\w+)\s*[(\[]`)
+// "func (r *repository.Repo) FindUser(" → m[1]="*repository.Repo", m[2]="FindUser"
+var funcNameRe = regexp.MustCompile(`\bfunc\s+(?:\(\w+\s+(\*?(?:\w+\.)?\w+)\)\s+)?(?:\w+\.)?(\w+)\s*[(\[]`)
 
 // extractFuncNamesFromResult は hover レスポンスの result フィールドから
 // SSA スタイル名（"(*T).Method" 形式、メソッドの場合のみ）と単純名を返す。

@@ -1,10 +1,10 @@
 {
-  "go.lintTool": "staticcheck",
   "go.alternateTools": {
-    "staticcheck": "sentinelfind"
+    "gopls": "sentinel-lsp-proxy"
   },
-  "go.lintOnSave": "package",
-  "gopls": {
-    "ui.diagnostic.staticcheck": false
-  }
+  "go.languageServerFlags": [
+    "--gopls=gopls",
+    "--sentinelfind=sentinelfind",
+    "--workspace=."
+  ]
 }
