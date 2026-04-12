@@ -1,0 +1,10 @@
+{
+  "go.alternateTools": {
+    "gopls": "errsweep-lsp-proxy"
+  },
+  "go.languageServerFlags": [
+    "--gopls=gopls",
+    "--errsweep=errsweep",
+    "--workspace=."
+  ]
+}
