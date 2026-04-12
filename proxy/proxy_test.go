@@ -262,10 +262,10 @@ func TestExtractFuncName(t *testing.T) {
 
 // TestProxy_HoverMethodSSAName は SSA スタイルのメソッド名（"(*T).Method"）で
 // キャッシュが引けることを確認する。
-// sentinelfind は fn.Name() でメソッドを "(*T).Method" と命名するため、
+// errsweep は fn.Name() でメソッドを "(*T).Method" と命名するため、
 // ホバーから抽出した単純名 "Method" ではなく SSA スタイル名で検索する必要がある。
 func TestProxy_HoverMethodSSAName(t *testing.T) {
-	// SSA スタイル名でキャッシュに登録（sentinelfind -json の実際の出力形式）
+	// SSA スタイル名でキャッシュに登録（errsweep -json の実際の出力形式）
 	cache := newTestCache(map[cacheKey]*CacheEntry{
 		{file: "/workspace/cmd/prepare_rename.go", line: 43}: {
 			FuncName:  "(*prepareRename).Run",

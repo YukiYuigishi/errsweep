@@ -14,7 +14,7 @@ import (
 var binPath string
 
 func TestMain(m *testing.M) {
-	bin, err := os.CreateTemp("", "sentinelfind-*")
+	bin, err := os.CreateTemp("", "errsweep-*")
 	if err != nil {
 		panic(err)
 	}
@@ -177,7 +177,7 @@ func TestFlag_Version(t *testing.T) {
 	if code != 0 {
 		t.Errorf("exit code = %d, want 0", code)
 	}
-	if !strings.Contains(out, "sentinelfind") {
+	if !strings.Contains(out, "errsweep") {
 		t.Errorf("-V=full output should contain binary name:\n%s", out)
 	}
 }

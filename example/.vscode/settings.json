@@ -1,10 +1,10 @@
 {
   "go.alternateTools": {
-    "gopls": "sentinel-lsp-proxy"
+    "gopls": "errsweep-lsp-proxy"
   },
   "go.languageServerFlags": [
     "--gopls=gopls",
-    "--sentinelfind=sentinelfind",
+    "--errsweep=errsweep",
     "--workspace=."
   ]
 }

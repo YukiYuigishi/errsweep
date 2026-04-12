@@ -14,7 +14,7 @@ import (
 
 // Analyzer は関数が返しうる Sentinel Error を報告する。
 var Analyzer = &analysis.Analyzer{
-	Name:      "sentinelfind",
+	Name:      "errsweep",
 	Doc:       "reports sentinel errors a function may return",
 	Run:       run,
 	Requires:  []*analysis.Analyzer{buildssa.Analyzer},

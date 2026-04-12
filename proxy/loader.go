@@ -16,13 +16,13 @@ import (
 
 // CacheLoader はキャッシュを構築する関数型。
 // テストや将来の実装で差し替えられるよう DI 可能な形にしてある。
-type CacheLoader func(sentinelfindPath, workspace string) (Cache, error)
+type CacheLoader func(errsweepPath, workspace string) (Cache, error)
 
 var buildCacheTimeout = 60 * time.Second
 var buildCachePattern = "./..."
 var buildCacheFilePath = ""
 
-// SetBuildCacheTimeout は sentinelfind 実行時のタイムアウトを設定する。
+// SetBuildCacheTimeout は errsweep 実行時のタイムアウトを設定する。
 func SetBuildCacheTimeout(timeout time.Duration) {
 	if timeout <= 0 {
 		return
@@ -30,7 +30,7 @@ func SetBuildCacheTimeout(timeout time.Duration) {
 	buildCacheTimeout = timeout
 }
 
-// SetBuildCachePattern は sentinelfind 実行時のパッケージパターンを設定する。
+// SetBuildCachePattern は errsweep 実行時のパッケージパターンを設定する。
 func SetBuildCachePattern(pattern string) {
 	if pattern == "" {
 		return
@@ -43,9 +43,9 @@ func SetBuildCacheFilePath(path string) {
 	buildCacheFilePath = path
 }
 
-// BuildCache は sentinelfind -json を実行して Cache を構築する。
+// BuildCache は errsweep -json を実行して Cache を構築する。
 // exit code 3（診断あり）は正常終了として扱う。
-func BuildCache(sentinelfindPath, workspace string) (Cache, error) {
+func BuildCache(errsweepPath, workspace string) (Cache, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), buildCacheTimeout)
 	defer cancel()
 	workspaceAbs, err := filepath.Abs(workspace)
@@ -61,8 +61,8 @@ func BuildCache(sentinelfindPath, workspace string) (Cache, error) {
 		SourceHash:    sourceHash,
 	}
 
-	// #nosec G204 -- sentinelfindPath/pattern はローカル開発者が設定する解析対象コマンド引数。
-	cmd := exec.CommandContext(ctx, sentinelfindPath, buildCacheArgs()...)
+	// #nosec G204 -- errsweepPath/pattern はローカル開発者が設定する解析対象コマンド引数。
+	cmd := exec.CommandContext(ctx, errsweepPath, buildCacheArgs()...)
 	cmd.Dir = workspaceAbs
 	out, err := cmd.Output()
 	if err != nil {
@@ -70,7 +70,7 @@ func BuildCache(sentinelfindPath, workspace string) (Cache, error) {
 			if cached, loadErr := loadValidCache(cacheFilePath, expectedMeta); loadErr == nil {
 				return cached, nil
 			}
-			return NewCache(), fmt.Errorf("BuildCache: sentinelfind timeout after %s (workspace=%s)", buildCacheTimeout, workspace)
+			return NewCache(), fmt.Errorf("BuildCache: errsweep timeout after %s (workspace=%s)", buildCacheTimeout, workspace)
 		}
 		// exit code 3 (diagnostics found) は正常
 		var ee *exec.ExitError
@@ -87,7 +87,7 @@ func BuildCache(sentinelfindPath, workspace string) (Cache, error) {
 		}
 		return NewCache(), nil
 	}
-	cache, parseErr := ParseSentinelfindJSON(out)
+	cache, parseErr := ParseErrsweepJSON(out)
 	if parseErr != nil {
 		if cached, loadErr := loadValidCache(cacheFilePath, expectedMeta); loadErr == nil {
 			return cached, nil
@@ -109,11 +109,11 @@ func resolveCacheFilePath(workspace string) string {
 	return filepath.Join(workspace, ".errsweep", "cache.gob")
 }
 
-// BuildCachePartial は pkgDirs で指定されたパッケージだけを sentinelfind で再解析し、
+// BuildCachePartial は pkgDirs で指定されたパッケージだけを errsweep で再解析し、
 // 結果の小さな Cache を返す。既存キャッシュへのマージは呼び出し側の責任。
 // pkgDirs は絶対パス or workspace 相対パスのどちらでもよい。
-// 返される Cache のエントリのファイルパスは sentinelfind 出力そのまま（通常は絶対パス）。
-func BuildCachePartial(sentinelfindPath, workspace string, pkgDirs []string) (Cache, error) {
+// 返される Cache のエントリのファイルパスは errsweep 出力そのまま（通常は絶対パス）。
+func BuildCachePartial(errsweepPath, workspace string, pkgDirs []string) (Cache, error) {
 	if len(pkgDirs) == 0 {
 		return NewCache(), nil
 	}
@@ -129,8 +129,8 @@ func BuildCachePartial(sentinelfindPath, workspace string, pkgDirs []string) (Ca
 	ctx, cancel := context.WithTimeout(context.Background(), buildCacheTimeout)
 	defer cancel()
 	args := append([]string{"-json"}, patterns...)
-	// #nosec G204 -- sentinelfindPath/pkgDirs はローカル開発者由来の解析対象指定。
-	cmd := exec.CommandContext(ctx, sentinelfindPath, args...)
+	// #nosec G204 -- errsweepPath/pkgDirs はローカル開発者由来の解析対象指定。
+	cmd := exec.CommandContext(ctx, errsweepPath, args...)
 	cmd.Dir = workspaceAbs
 	out, err := cmd.Output()
 	if err != nil {
@@ -142,14 +142,14 @@ func BuildCachePartial(sentinelfindPath, workspace string, pkgDirs []string) (Ca
 	if len(out) == 0 {
 		return NewCache(), nil
 	}
-	cache, parseErr := ParseSentinelfindJSON(out)
+	cache, parseErr := ParseErrsweepJSON(out)
 	if parseErr != nil {
 		return NewCache(), fmt.Errorf("BuildCachePartial: %w", parseErr)
 	}
 	return cache, nil
 }
 
-// pkgDirsToPatterns は pkgDirs を sentinelfind 向けの `./pkg` パターンに正規化する。
+// pkgDirsToPatterns は pkgDirs を errsweep 向けの `./pkg` パターンに正規化する。
 // workspace 外のパスはスキップされる。
 func pkgDirsToPatterns(workspaceAbs string, pkgDirs []string) []string {
 	seen := make(map[string]bool, len(pkgDirs))
@@ -211,7 +211,7 @@ func computeSourceHash(workspace string) (string, error) {
 			case ".git", ".errsweep", "node_modules":
 				return fs.SkipDir
 			}
-			// ネストした go.mod は別モジュール（sentinelfind ./... の対象外）なので
+			// ネストした go.mod は別モジュール（errsweep ./... の対象外）なので
 			// ハッシュ計算から除外する。root 自身はチェックしない。
 			if path != workspace {
 				if _, err := os.Stat(filepath.Join(path, "go.mod")); err == nil {

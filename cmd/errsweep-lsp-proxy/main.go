@@ -1,16 +1,16 @@
-// sentinel-lsp-proxy は gopls と エディタの間に挟まる LSP プロキシ。
+// errsweep-lsp-proxy は gopls と エディタの間に挟まる LSP プロキシ。
 // textDocument/hover レスポンスに Sentinel Error 情報を追記する。
 //
 // 使い方:
 //
-//	sentinel-lsp-proxy [--gopls PATH] [--sentinelfind PATH] [--workspace DIR] [gopls args...]
+//	errsweep-lsp-proxy [--gopls PATH] [--errsweep PATH] [--workspace DIR] [gopls args...]
 //
 // VS Code での設定例:
 //
-//	"go.alternateTools": {"gopls": "/path/to/sentinel-lsp-proxy"},
+//	"go.alternateTools": {"gopls": "/path/to/errsweep-lsp-proxy"},
 //	"go.languageServerFlags": [
 //	  "--gopls=/path/to/gopls",
-//	  "--sentinelfind=/path/to/sentinelfind",
+//	  "--errsweep=/path/to/errsweep",
 //	  "--workspace=/path/to/project"
 //	]
 package main
@@ -41,7 +41,7 @@ type refreshRequest struct {
 }
 
 // pendingRefresh は debounce 窓内に蓄積される再解析要求の集約状態。
-// 複数の didSave を 1 回の sentinelfind 呼び出しにまとめるために使う。
+// 複数の didSave を 1 回の errsweep 呼び出しにまとめるために使う。
 type pendingRefresh struct {
 	mu      sync.Mutex
 	full    bool
@@ -80,10 +80,10 @@ var cacheLoader proxy.CacheLoader = proxy.BuildCache
 
 func main() {
 	goplsPath := flag.String("gopls", "gopls", "gopls バイナリのパス")
-	sentinelfindPath := flag.String("sentinelfind", "sentinelfind", "sentinelfind バイナリのパス")
+	errsweepPath := flag.String("errsweep", "errsweep", "errsweep バイナリのパス")
 	workspace := flag.String("workspace", ".", "解析対象のワークスペースディレクトリ")
-	cacheTimeout := flag.Duration("cache-timeout", 60*time.Second, "sentinelfind キャッシュ構築のタイムアウト")
-	cachePattern := flag.String("cache-pattern", "./...", "sentinelfind の解析対象パッケージパターン")
+	cacheTimeout := flag.Duration("cache-timeout", 60*time.Second, "errsweep キャッシュ構築のタイムアウト")
+	cachePattern := flag.String("cache-pattern", "./...", "errsweep の解析対象パッケージパターン")
 	cacheFile := flag.String("cache-file", "", "永続キャッシュファイルパス（未指定時: <workspace>/.errsweep/cache.gob）")
 	cacheRefreshMinInterval := flag.Duration("cache-refresh-min-interval", 2*time.Second, "キャッシュ再構築の最小間隔")
 	cacheFullRefreshInterval := flag.Duration("cache-full-refresh-interval", 5*time.Minute, "partial 再解析を full に昇格させる最小経過時間（0 で無効）")
@@ -93,19 +93,19 @@ func main() {
 	proxy.SetBuildCacheFilePath(*cacheFile)
 	workspaceRoot, err := filepath.Abs(*workspace)
 	if err != nil {
-		log.Fatalf("sentinel-lsp-proxy: resolve workspace path: %v", err)
+		log.Fatalf("errsweep-lsp-proxy: resolve workspace path: %v", err)
 	}
 
 	// flag.Args() には VS Code が渡してくる gopls サブコマンド・フラグ（"serve" など）が入る
 	goplsSubArgs := flag.Args()
 	initialBuildStart := time.Now()
-	cache, err := cacheLoader(*sentinelfindPath, *workspace)
+	cache, err := cacheLoader(*errsweepPath, *workspace)
 	initialBuildElapsed := time.Since(initialBuildStart)
 	if err != nil {
-		log.Printf("sentinel-lsp-proxy: cache build failed after %s (continuing without sentinels): %v", initialBuildElapsed, err)
+		log.Printf("errsweep-lsp-proxy: cache build failed after %s (continuing without sentinels): %v", initialBuildElapsed, err)
 		cache = proxy.NewCache()
 	}
-	log.Printf("sentinel-lsp-proxy: loaded %d entries from sentinelfind in %s", cache.Len(), initialBuildElapsed)
+	log.Printf("errsweep-lsp-proxy: loaded %d entries from errsweep in %s", cache.Len(), initialBuildElapsed)
 	p := proxy.NewProxy(cache)
 	refreshCh := make(chan struct{}, 1)
 	pending := &pendingRefresh{}
@@ -135,29 +135,29 @@ func main() {
 			}
 			refreshStart := time.Now()
 			if full || len(pkgDirs) == 0 {
-				newCache, err := cacheLoader(*sentinelfindPath, *workspace)
+				newCache, err := cacheLoader(*errsweepPath, *workspace)
 				refreshElapsed := time.Since(refreshStart)
 				if err != nil {
-					log.Printf("sentinel-lsp-proxy: cache refresh failed after %s: %v", refreshElapsed, err)
+					log.Printf("errsweep-lsp-proxy: cache refresh failed after %s: %v", refreshElapsed, err)
 					continue
 				}
 				p.SetCache(newCache)
 				lastFullRefresh = time.Now()
 				if upgraded {
-					log.Printf("sentinel-lsp-proxy: cache refreshed full upgraded (%d entries, %s, drift-pkgs=%d)", newCache.Len(), refreshElapsed, len(pkgDirs))
+					log.Printf("errsweep-lsp-proxy: cache refreshed full upgraded (%d entries, %s, drift-pkgs=%d)", newCache.Len(), refreshElapsed, len(pkgDirs))
 				} else {
-					log.Printf("sentinel-lsp-proxy: cache refreshed full (%d entries, %s)", newCache.Len(), refreshElapsed)
+					log.Printf("errsweep-lsp-proxy: cache refreshed full (%d entries, %s)", newCache.Len(), refreshElapsed)
 				}
 				continue
 			}
-			partial, err := proxy.BuildCachePartial(*sentinelfindPath, *workspace, pkgDirs)
+			partial, err := proxy.BuildCachePartial(*errsweepPath, *workspace, pkgDirs)
 			refreshElapsed := time.Since(refreshStart)
 			if err != nil {
-				log.Printf("sentinel-lsp-proxy: cache refresh partial failed after %s (pkgs=%d): %v", refreshElapsed, len(pkgDirs), err)
+				log.Printf("errsweep-lsp-proxy: cache refresh partial failed after %s (pkgs=%d): %v", refreshElapsed, len(pkgDirs), err)
 				continue
 			}
 			p.MergePartial(partial, pkgDirs)
-			log.Printf("sentinel-lsp-proxy: cache refreshed partial (%d entries, %s, pkgs=%d)", p.CacheLen(), refreshElapsed, len(pkgDirs))
+			log.Printf("errsweep-lsp-proxy: cache refreshed partial (%d entries, %s, pkgs=%d)", p.CacheLen(), refreshElapsed, len(pkgDirs))
 		}
 	}()
 
@@ -174,7 +174,7 @@ func main() {
 	}
 	gopls.Stderr = os.Stderr
 	if err := gopls.Start(); err != nil {
-		log.Fatalf("sentinel-lsp-proxy: failed to start %s: %v", *goplsPath, err)
+		log.Fatalf("errsweep-lsp-proxy: failed to start %s: %v", *goplsPath, err)
 	}
 
 	// エディタ → gopls へのパイプ（リクエストのトラッキング付き）
@@ -184,13 +184,13 @@ func main() {
 			raw, err := proxy.ReadMessage(editorReader)
 			if err != nil {
 				if !errors.Is(err, io.EOF) {
-					log.Printf("sentinel-lsp-proxy: read from editor: %v", err)
+					log.Printf("errsweep-lsp-proxy: read from editor: %v", err)
 				}
 				goplsIn.Close()
 				return
 			}
 			if err := p.TrackRequest(raw); err != nil {
-				log.Printf("sentinel-lsp-proxy: trackRequest: %v", err)
+				log.Printf("errsweep-lsp-proxy: trackRequest: %v", err)
 			}
 			if req, ok := parseRefreshRequest(raw, workspaceRoot); ok {
 				pending.add(req)
@@ -200,7 +200,7 @@ func main() {
 				}
 			}
 			if err := proxy.WriteMessage(goplsIn, raw); err != nil {
-				log.Printf("sentinel-lsp-proxy: write to gopls: %v", err)
+				log.Printf("errsweep-lsp-proxy: write to gopls: %v", err)
 				return
 			}
 		}
@@ -212,17 +212,17 @@ func main() {
 		raw, err := proxy.ReadMessage(goplsReader)
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
-				log.Printf("sentinel-lsp-proxy: read from gopls: %v", err)
+				log.Printf("errsweep-lsp-proxy: read from gopls: %v", err)
 			}
 			break
 		}
 		if err := p.ProcessServerMessage(raw, os.Stdout); err != nil {
-			log.Printf("sentinel-lsp-proxy: processServerMessage: %v", err)
+			log.Printf("errsweep-lsp-proxy: processServerMessage: %v", err)
 		}
 	}
 
 	if err := gopls.Wait(); err != nil {
-		log.Printf("sentinel-lsp-proxy: gopls exited: %v", err)
+		log.Printf("errsweep-lsp-proxy: gopls exited: %v", err)
 	}
 }
 

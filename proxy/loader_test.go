@@ -218,7 +218,7 @@ func TestBuildCache_FallbackUsesMatchingMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// #nosec G306 -- テスト用の擬似 sentinelfind バイナリ。exec するため 0o755 が必須。
+	// #nosec G306 -- テスト用の擬似 errsweep バイナリ。exec するため 0o755 が必須。
 	if err := os.WriteFile(filepath.Join(dir, "sleep.sh"), []byte("#!/bin/sh\nsleep 2\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}

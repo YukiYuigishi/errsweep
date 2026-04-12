@@ -13,9 +13,9 @@ func TestCacheStore_SaveAndLoadRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "cache.gob")
 
-	c, err := ParseSentinelfindJSON([]byte(`{
+	c, err := ParseErrsweepJSON([]byte(`{
 		"pkg": {
-			"sentinelfind": [
+			"errsweep": [
 				{
 					"posn": "/src/tag.go:44:6",
 					"message": "CreateTag returns sentinels via *repository.A: pkg.ErrA"

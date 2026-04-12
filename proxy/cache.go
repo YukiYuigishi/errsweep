@@ -88,7 +88,7 @@ func (c *Cache) addEntry(key cacheKey, entry *CacheEntry) {
 
 // ReplacePackages は absPkgDirs の直下に属する既存エントリを削除し、
 // src のエントリをマージする。差分再解析の結果を既存キャッシュに反映するために使う。
-// absPkgDirs は sentinelfind が出力するファイルパスと同じ形式（絶対パス）である必要がある。
+// absPkgDirs は errsweep が出力するファイルパスと同じ形式（絶対パス）である必要がある。
 // 「直下」判定なので親子関係にあるパッケージディレクトリ（例: ./proxy と ./proxy/sub）を
 // 同時に渡しても、それぞれ対応するエントリだけが置き換えられる。
 func (c *Cache) ReplacePackages(src Cache, absPkgDirs []string) {
@@ -221,16 +221,16 @@ type diagnostic struct {
 	Message string `json:"message"`
 }
 
-// ParseSentinelfindJSON は `sentinelfind -json` の出力を Cache に変換する（公開 API）。
-func ParseSentinelfindJSON(data []byte) (Cache, error) { return parseSentinelfindJSON(data) }
+// ParseErrsweepJSON は `errsweep -json` の出力を Cache に変換する（公開 API）。
+func ParseErrsweepJSON(data []byte) (Cache, error) { return parseErrsweepJSON(data) }
 
-// parseSentinelfindJSON は `sentinelfind -json` の出力を Cache に変換する。
+// parseErrsweepJSON は `errsweep -json` の出力を Cache に変換する。
 // 同一 file:line に複数診断がある場合（例: 合算ライン + per-concrete 内訳ライン）は
 // エントリを上書きせず、sentinels を union し ByConcrete に内訳を蓄積する。
-func parseSentinelfindJSON(data []byte) (Cache, error) {
+func parseErrsweepJSON(data []byte) (Cache, error) {
 	var out map[string]map[string]json.RawMessage
 	if err := json.Unmarshal(data, &out); err != nil {
-		return NewCache(), fmt.Errorf("parseSentinelfindJSON: %w", err)
+		return NewCache(), fmt.Errorf("parseErrsweepJSON: %w", err)
 	}
 
 	cache := NewCache()

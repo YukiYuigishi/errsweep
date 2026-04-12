@@ -1,6 +1,6 @@
-/sentinelfind
-/sentinel-lsp-proxy
-/sentinel-lsp
+/errsweep
+/errsweep-lsp-proxy
+/errsweep-lsp
 /tmp/
 /.ci-cache/
 /.codex/

@@ -14,29 +14,29 @@ import (
 )
 
 var (
-	proxyBin        string
-	sentinelfindBin string
-	dummyGoplsBin   string
+	proxyBin      string
+	errsweepBin   string
+	dummyGoplsBin string
 )
 
 func TestMain(m *testing.M) {
-	tmp, err := os.MkdirTemp("", "sentinel-lsp-proxy-e2e-*")
+	tmp, err := os.MkdirTemp("", "errsweep-lsp-proxy-e2e-*")
 	if err != nil {
 		panic(err)
 	}
 	defer os.RemoveAll(tmp)
 
-	proxyBin = filepath.Join(tmp, "sentinel-lsp-proxy")
-	sentinelfindBin = filepath.Join(tmp, "sentinelfind")
+	proxyBin = filepath.Join(tmp, "errsweep-lsp-proxy")
+	errsweepBin = filepath.Join(tmp, "errsweep")
 	dummyGoplsBin = filepath.Join(tmp, "dummy-gopls")
 
 	for _, target := range []struct {
 		bin string
 		pkg string
 	}{
-		{proxyBin, "github.com/YukiYuigishi/errsweep/cmd/sentinel-lsp-proxy"},
-		{sentinelfindBin, "github.com/YukiYuigishi/errsweep/cmd/sentinelfind"},
-		{dummyGoplsBin, "github.com/YukiYuigishi/errsweep/cmd/sentinel-lsp-proxy/testdata/dummy-gopls"},
+		{proxyBin, "github.com/YukiYuigishi/errsweep/cmd/errsweep-lsp-proxy"},
+		{errsweepBin, "github.com/YukiYuigishi/errsweep/cmd/errsweep"},
+		{dummyGoplsBin, "github.com/YukiYuigishi/errsweep/cmd/errsweep-lsp-proxy/testdata/dummy-gopls"},
 	} {
 		// #nosec G204 -- テスト内で固定のビルド対象を指定している。
 		if out, err := exec.Command("go", "build", "-o", target.bin, target.pkg).CombinedOutput(); err != nil {
@@ -71,15 +71,15 @@ func lspFrame(t *testing.T, msg interface{}) []byte {
 	return buf.Bytes()
 }
 
-// TestE2E_HoverSentinelAppended は sentinel-lsp-proxy がキャッシュヒット時に
+// TestE2E_HoverSentinelAppended は errsweep-lsp-proxy がキャッシュヒット時に
 // Sentinel 情報を hover レスポンスへ追記することを確認する。
 func TestE2E_HoverSentinelAppended(t *testing.T) {
 	ws := exampleWorkspace(t)
 
-	// sentinel-lsp-proxy を起動（gopls の代わりに dummy-gopls を使う）
+	// errsweep-lsp-proxy を起動（gopls の代わりに dummy-gopls を使う）
 	cmd := exec.Command(proxyBin,
 		"--gopls="+dummyGoplsBin,
-		"--sentinelfind="+sentinelfindBin,
+		"--errsweep="+errsweepBin,
 		"--workspace="+ws,
 	)
 	stdin, err := cmd.StdinPipe()
@@ -157,7 +157,7 @@ func TestE2E_HoverNoEntry(t *testing.T) {
 
 	cmd := exec.Command(proxyBin,
 		"--gopls="+dummyGoplsBin,
-		"--sentinelfind="+sentinelfindBin,
+		"--errsweep="+errsweepBin,
 		"--workspace="+ws,
 	)
 	stdin, err := cmd.StdinPipe()

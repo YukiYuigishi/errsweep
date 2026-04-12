@@ -1,13 +1,13 @@
-// sentinel-lsp はセンチネルエラー情報を提供するミニマルな LSP サーバー。
+// errsweep-lsp はセンチネルエラー情報を提供するミニマルな LSP サーバー。
 // gopls とは独立して動作し、textDocument/hover のみ実装する。
 //
 // 使い方:
 //
-//	sentinel-lsp [--sentinelfind PATH] [--workspace DIR]
+//	errsweep-lsp [--errsweep PATH] [--workspace DIR]
 //
 // VS Code での設定例 (gopls と並列ではなく単体サーバーとして使う場合):
 //
-//	"go.alternateTools": {"gopls": "/path/to/sentinel-lsp"},
+//	"go.alternateTools": {"gopls": "/path/to/errsweep-lsp"},
 package main
 
 import (
@@ -30,16 +30,16 @@ import (
 var cacheLoader proxy.CacheLoader = proxy.BuildCache
 
 func main() {
-	sentinelfindPath := flag.String("sentinelfind", "sentinelfind", "sentinelfind バイナリのパス")
+	errsweepPath := flag.String("errsweep", "errsweep", "errsweep バイナリのパス")
 	workspace := flag.String("workspace", ".", "解析対象のワークスペースディレクトリ")
 	flag.Parse()
 
-	cache, err := cacheLoader(*sentinelfindPath, *workspace)
+	cache, err := cacheLoader(*errsweepPath, *workspace)
 	if err != nil {
-		log.Printf("sentinel-lsp: cache build failed (continuing without sentinels): %v", err)
+		log.Printf("errsweep-lsp: cache build failed (continuing without sentinels): %v", err)
 		cache = proxy.NewCache()
 	}
-	log.Printf("sentinel-lsp: loaded %d entries", cache.Len())
+	log.Printf("errsweep-lsp: loaded %d entries", cache.Len())
 
 	srv := &server{cache: cache}
 	srv.run(os.Stdin, os.Stdout)
@@ -72,14 +72,14 @@ func (s *server) run(r io.Reader, w io.Writer) {
 		raw, err := proxy.ReadMessage(br)
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
-				log.Printf("sentinel-lsp: read: %v", err)
+				log.Printf("errsweep-lsp: read: %v", err)
 			}
 			return
 		}
 
 		var msg rpcMessage
 		if err := json.Unmarshal(raw, &msg); err != nil {
-			log.Printf("sentinel-lsp: parse: %v", err)
+			log.Printf("errsweep-lsp: parse: %v", err)
 			continue
 		}
 
@@ -93,7 +93,7 @@ func (s *server) run(r io.Reader, w io.Writer) {
 
 		result, rpcErr := s.handleRequest(msg.Method, msg.Params)
 		if err := s.reply(w, msg.ID, result, rpcErr); err != nil {
-			log.Printf("sentinel-lsp: reply: %v", err)
+			log.Printf("errsweep-lsp: reply: %v", err)
 		}
 	}
 }
@@ -131,7 +131,7 @@ func (s *server) handleInitialize() (interface{}, *rpcError) {
 			"hoverProvider": true,
 		},
 		"serverInfo": map[string]interface{}{
-			"name":    "sentinel-lsp",
+			"name":    "errsweep-lsp",
 			"version": "0.1.0",
 		},
 	}, nil

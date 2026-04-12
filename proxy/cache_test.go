@@ -6,7 +6,7 @@ import (
 
 const sampleJSON = `{
 	"example.com/myapp/repository": {
-		"sentinelfind": [
+		"errsweep": [
 			{
 				"posn": "/workspace/repository/user.go:8:6",
 				"end":  "/workspace/repository/user.go:8:6",
@@ -20,7 +20,7 @@ const sampleJSON = `{
 		]
 	},
 	"example.com/myapp/usecase": {
-		"sentinelfind": [
+		"errsweep": [
 			{
 				"posn": "/workspace/usecase/user.go:9:6",
 				"end":  "/workspace/usecase/user.go:9:6",
@@ -31,7 +31,7 @@ const sampleJSON = `{
 }`
 
 func TestCache_ParseJSON(t *testing.T) {
-	c, err := parseSentinelfindJSON([]byte(sampleJSON))
+	c, err := parseErrsweepJSON([]byte(sampleJSON))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +41,7 @@ func TestCache_ParseJSON(t *testing.T) {
 }
 
 func TestCache_LookupByFile(t *testing.T) {
-	c, err := parseSentinelfindJSON([]byte(sampleJSON))
+	c, err := parseErrsweepJSON([]byte(sampleJSON))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +60,7 @@ func TestCache_LookupByFile(t *testing.T) {
 }
 
 func TestCache_LookupMiss(t *testing.T) {
-	c, err := parseSentinelfindJSON([]byte(sampleJSON))
+	c, err := parseErrsweepJSON([]byte(sampleJSON))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestCache_LookupMiss(t *testing.T) {
 }
 
 func TestCache_LookupByFuncName(t *testing.T) {
-	c, err := parseSentinelfindJSON([]byte(sampleJSON))
+	c, err := parseErrsweepJSON([]byte(sampleJSON))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func TestCache_LookupByFuncName(t *testing.T) {
 func TestCache_LookupByFuncName_MergeSameNameAcrossPackages(t *testing.T) {
 	const multiPkgJSON = `{
 		"pkg/a": {
-			"sentinelfind": [
+			"errsweep": [
 				{
 					"posn": "/workspace/a/new_hoge.go:10:2",
 					"message": "NewHoge returns sentinels: a.ErrA"
@@ -104,7 +104,7 @@ func TestCache_LookupByFuncName_MergeSameNameAcrossPackages(t *testing.T) {
 			]
 		},
 		"pkg/b": {
-			"sentinelfind": [
+			"errsweep": [
 				{
 					"posn": "/workspace/b/new_hoge.go:20:2",
 					"message": "NewHoge returns sentinels: b.ErrB"
@@ -112,7 +112,7 @@ func TestCache_LookupByFuncName_MergeSameNameAcrossPackages(t *testing.T) {
 			]
 		}
 	}`
-	c, err := parseSentinelfindJSON([]byte(multiPkgJSON))
+	c, err := parseErrsweepJSON([]byte(multiPkgJSON))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +131,7 @@ func TestCache_LookupByFuncName_MergeSameNameAcrossPackages(t *testing.T) {
 func TestCache_LookupByFuncName_MethodFallbackBySimpleName(t *testing.T) {
 	const methodJSON = `{
 		"pkg/usecase": {
-			"sentinelfind": [
+			"errsweep": [
 				{
 					"posn": "/workspace/usecase/service.go:30:2",
 					"message": "(*Service).Create returns sentinels: usecase.ErrInvalid"
@@ -139,7 +139,7 @@ func TestCache_LookupByFuncName_MethodFallbackBySimpleName(t *testing.T) {
 			]
 		}
 	}`
-	c, err := parseSentinelfindJSON([]byte(methodJSON))
+	c, err := parseErrsweepJSON([]byte(methodJSON))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +155,7 @@ func TestCache_LookupByFuncName_MethodFallbackBySimpleName(t *testing.T) {
 func TestCache_MultipleSentinels(t *testing.T) {
 	const multiJSON = `{
 		"pkg": {
-			"sentinelfind": [
+			"errsweep": [
 				{
 					"posn": "/src/foo.go:5:6",
 					"end":  "/src/foo.go:5:6",
@@ -164,7 +164,7 @@ func TestCache_MultipleSentinels(t *testing.T) {
 			]
 		}
 	}`
-	c, err := parseSentinelfindJSON([]byte(multiJSON))
+	c, err := parseErrsweepJSON([]byte(multiJSON))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +180,7 @@ func TestCache_MultipleSentinels(t *testing.T) {
 func TestCache_ParseJSON_WrappedDiagnosticsObject(t *testing.T) {
 	const wrappedJSON = `{
 		"pkg": {
-			"sentinelfind": {
+			"errsweep": {
 				"diagnostics": [
 					{
 						"posn": "/src/foo.go:5:6",
@@ -190,7 +190,7 @@ func TestCache_ParseJSON_WrappedDiagnosticsObject(t *testing.T) {
 			}
 		}
 	}`
-	c, err := parseSentinelfindJSON([]byte(wrappedJSON))
+	c, err := parseErrsweepJSON([]byte(wrappedJSON))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,13 +206,13 @@ func TestCache_ParseJSON_WrappedDiagnosticsObject(t *testing.T) {
 func TestCache_ParseJSON_SingleDiagnosticObject(t *testing.T) {
 	const singleJSON = `{
 		"pkg": {
-			"sentinelfind": {
+			"errsweep": {
 				"posn": "/src/bar.go:7:2",
 				"message": "Run returns sentinels: pkg.ErrB"
 			}
 		}
 	}`
-	c, err := parseSentinelfindJSON([]byte(singleJSON))
+	c, err := parseErrsweepJSON([]byte(singleJSON))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,7 +230,7 @@ func TestCache_MultiConcreteUnion(t *testing.T) {
 	// 上書きではなく union で merge され、ByConcrete に内訳が蓄積されること。
 	const multiConcreteJSON = `{
 		"pkg": {
-			"sentinelfind": [
+			"errsweep": [
 				{
 					"posn": "/src/tag.go:44:6",
 					"end":  "/src/tag.go:44:6",
@@ -249,7 +249,7 @@ func TestCache_MultiConcreteUnion(t *testing.T) {
 			]
 		}
 	}`
-	c, err := parseSentinelfindJSON([]byte(multiConcreteJSON))
+	c, err := parseErrsweepJSON([]byte(multiConcreteJSON))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -276,7 +276,7 @@ func TestCache_MultiConcreteUnion(t *testing.T) {
 	// per-concrete だけで合算ラインが来ない順序でも union されること。
 	const perConcreteOnlyJSON = `{
 		"pkg": {
-			"sentinelfind": [
+			"errsweep": [
 				{
 					"posn": "/src/get.go:35:6",
 					"end":  "/src/get.go:35:6",
@@ -290,7 +290,7 @@ func TestCache_MultiConcreteUnion(t *testing.T) {
 			]
 		}
 	}`
-	c, err = parseSentinelfindJSON([]byte(perConcreteOnlyJSON))
+	c, err = parseErrsweepJSON([]byte(perConcreteOnlyJSON))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -369,7 +369,7 @@ func TestCache_ReplacePackages(t *testing.T) {
 		FuncName:  "A",
 		Sentinels: []string{"pkg.ErrA2"}, // updated
 	})
-	// b.go は削除（sentinelfind の再解析で sentinel 無しになったケース想定）
+	// b.go は削除（errsweep の再解析で sentinel 無しになったケース想定）
 
 	c.ReplacePackages(src, []string{"/ws/pkg"})
 
@@ -406,7 +406,7 @@ func TestPkgDirsToPatterns(t *testing.T) {
 		in   []string
 		want []string
 	}{
-		{"relative and abs mixed", []string{"/ws/proxy", "cmd/sentinel-lsp-proxy"}, []string{"./proxy", "./cmd/sentinel-lsp-proxy"}},
+		{"relative and abs mixed", []string{"/ws/proxy", "cmd/errsweep-lsp-proxy"}, []string{"./proxy", "./cmd/errsweep-lsp-proxy"}},
 		{"dedupes", []string{"/ws/proxy", "./proxy", "proxy"}, []string{"./proxy"}},
 		{"outside workspace skipped", []string{"/elsewhere/foo"}, nil},
 		{"root becomes ./...", []string{"/ws"}, []string{"./..."}},

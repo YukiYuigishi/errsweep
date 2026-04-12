@@ -1,6 +1,6 @@
 # Example module
 
-`example/` は、`sentinelfind` と hover 連携を試すための公開向けサンプルモジュールです。
+`example/` は、`errsweep` と hover 連携を試すための公開向けサンプルモジュールです。
 
 ## 目的
 
@@ -16,20 +16,20 @@
 | `usecase/` | `repository` を束ねるユースケース層（interface DI 含む） |
 | `catalogrepo/` | 呼び出し側 hover 再現用の被呼び出しパッケージ |
 | `catalogservice/` | `catalogrepo` を呼ぶ呼び出し側パッケージ |
-| `.vscode/settings.json` | `sentinel-lsp-proxy` 前提の VS Code 設定例 |
+| `.vscode/settings.json` | `errsweep-lsp-proxy` 前提の VS Code 設定例 |
 
 ## 1. CLI で解析結果を確認
 
 ```bash
 cd example
 go test ./...
-../sentinelfind ./...
+../errsweep ./...
 ```
 
 JSON 形式で確認する場合:
 
 ```bash
-../sentinelfind -json ./... > /tmp/example-sentinelfind.json
+../errsweep -json ./... > /tmp/example-errsweep.json
 ```
 
 ## 2. VS Code で hover を確認
@@ -38,8 +38,8 @@ JSON 形式で確認する場合:
 
 ```bash
 make build
-go install ./cmd/sentinel-lsp-proxy
-go install ./cmd/sentinelfind
+go install ./cmd/errsweep-lsp-proxy
+go install ./cmd/errsweep
 ```
 
 その後、VS Code で `example/` を開いてウィンドウを再読み込みし、
@@ -48,8 +48,8 @@ go install ./cmd/sentinelfind
 表示されない場合の確認:
 
 ```bash
-command -v sentinel-lsp-proxy
-command -v sentinelfind
+command -v errsweep-lsp-proxy
+command -v errsweep
 ```
 
 ## 3. 呼び出し側 hover 再現ケース（catalogservice -> catalogrepo）

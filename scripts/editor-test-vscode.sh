@@ -11,7 +11,7 @@ LOG_STD="$TMPDIR/code-stdout.log"
 SETTINGS_DIR="$USER_DIR/User"
 SETTINGS_JSON="$SETTINGS_DIR/settings.json"
 PROXY_LOG="$TMPDIR/proxy.log"
-WRAPPER="$TMPDIR/sentinel-lsp-proxy-wrapper.sh"
+WRAPPER="$TMPDIR/errsweep-lsp-proxy-wrapper.sh"
 HOVER_EXT_DIR="$ROOT/scripts/vscode-hover-e2e"
 CODE_PID=""
 
@@ -48,7 +48,7 @@ mkdir -p "$SETTINGS_DIR" "$EXT_DIR"
 
 cat > "$WRAPPER" <<EOF
 #!/usr/bin/env bash
-exec "$ROOT/sentinel-lsp-proxy" "\$@" 2>>"$PROXY_LOG"
+exec "$ROOT/errsweep-lsp-proxy" "\$@" 2>>"$PROXY_LOG"
 EOF
 chmod +x "$WRAPPER"
 
@@ -59,7 +59,7 @@ cat > "$SETTINGS_JSON" <<EOF
   },
   "go.languageServerFlags": [
     "--gopls=gopls",
-    "--sentinelfind=$ROOT/sentinelfind",
+    "--errsweep=$ROOT/errsweep",
     "--workspace=$ROOT",
     "--cache-timeout=120s"
   ]
@@ -96,7 +96,7 @@ code \
 CODE_PID=$!
 
 for _ in $(seq 1 60); do
-  if grep -q "sentinel-lsp-proxy: loaded " "$PROXY_LOG" 2>/dev/null; then
+  if grep -q "errsweep-lsp-proxy: loaded " "$PROXY_LOG" 2>/dev/null; then
     break
   fi
   sleep 1
@@ -105,7 +105,7 @@ done
 terminate_pid "$CODE_PID"
 wait "$CODE_PID" 2>/dev/null || true
 
-if grep -q "sentinel-lsp-proxy: loaded " "$PROXY_LOG" 2>/dev/null && ! grep -q "Hover E2E failed:" "$LOG_STD"; then
+if grep -q "errsweep-lsp-proxy: loaded " "$PROXY_LOG" 2>/dev/null && ! grep -q "Hover E2E failed:" "$LOG_STD"; then
   echo "vscode editor test: PASS"
 else
   echo "vscode editor test: FAIL"

@@ -75,9 +75,9 @@ func TestServer_Initialize(t *testing.T) {
 }
 
 func TestServer_HoverHit(t *testing.T) {
-	cache, err := proxy.ParseSentinelfindJSON([]byte(`{
+	cache, err := proxy.ParseErrsweepJSON([]byte(`{
 		"pkg": {
-			"sentinelfind": [{
+			"errsweep": [{
 				"posn": "/src/foo.go:5:1",
 				"message": "DoSomething returns sentinels: pkg.ErrFoo"
 			}]
@@ -154,9 +154,9 @@ func TestServer_HoverMiss(t *testing.T) {
 }
 
 func TestServer_HoverFallbackBySymbolName(t *testing.T) {
-	cache, err := proxy.ParseSentinelfindJSON([]byte(`{
+	cache, err := proxy.ParseErrsweepJSON([]byte(`{
 		"pkg": {
-			"sentinelfind": [{
+			"errsweep": [{
 				"posn": "/src/repo.go:30:1",
 				"message": "(*Service).Create returns sentinels: pkg.ErrCreate"
 			}]

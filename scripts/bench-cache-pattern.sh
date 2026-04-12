@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-BIN_PATH="${CACHE_BENCH_BIN:-$ROOT/sentinelfind}"
+BIN_PATH="${CACHE_BENCH_BIN:-$ROOT/errsweep}"
 REPO_PATH="${CACHE_BENCH_REPO:-$ROOT/example}"
 RUNS="${CACHE_BENCH_RUNS:-1}"
 PRESET="${CACHE_BENCH_PRESET:-}"
@@ -13,7 +13,7 @@ MAX_AVG_EXIT="${CACHE_BENCH_MAX_AVG_EXIT:-}"
 FORMAT="${CACHE_BENCH_FORMAT:-plain}"
 
 if [[ ! -x "$BIN_PATH" ]]; then
-  echo "error: sentinelfind binary not found or not executable: $BIN_PATH" >&2
+  echo "error: errsweep binary not found or not executable: $BIN_PATH" >&2
   echo "hint: run 'make build' first or set CACHE_BENCH_BIN" >&2
   exit 1
 fi

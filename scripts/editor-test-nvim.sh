@@ -8,7 +8,7 @@ trap 'rm -rf "$TMPDIR"' EXIT
 NVIM_LOG="$TMPDIR/nvim.log"
 INIT_LUA="$TMPDIR/init.lua"
 PROXY_LOG="$TMPDIR/proxy.log"
-WRAPPER="$TMPDIR/sentinel-lsp-proxy-wrapper.sh"
+WRAPPER="$TMPDIR/errsweep-lsp-proxy-wrapper.sh"
 XDG_CONFIG_HOME="$TMPDIR/xdg-config"
 XDG_DATA_HOME="$TMPDIR/xdg-data"
 XDG_STATE_HOME="$TMPDIR/xdg-state"
@@ -19,7 +19,7 @@ touch "$NVIM_LOG" "$PROXY_LOG"
 
 cat > "$WRAPPER" <<EOF
 #!/usr/bin/env bash
-exec "$ROOT/sentinel-lsp-proxy" "\$@" 2>>"$PROXY_LOG"
+exec "$ROOT/errsweep-lsp-proxy" "\$@" 2>>"$PROXY_LOG"
 EOF
 chmod +x "$WRAPPER"
 
@@ -34,7 +34,7 @@ if vim.lsp.start then
     cmd = {
       "$WRAPPER",
       "--gopls=gopls",
-      "--sentinelfind=$ROOT/sentinelfind",
+      "--errsweep=$ROOT/errsweep",
       "--workspace=$ROOT",
       "--cache-timeout=120s",
       "serve",
@@ -47,7 +47,7 @@ else
   cmd = {
     "$WRAPPER",
     "--gopls=gopls",
-    "--sentinelfind=$ROOT/sentinelfind",
+    "--errsweep=$ROOT/errsweep",
     "--workspace=$ROOT",
     "--cache-timeout=120s",
     "serve",
@@ -62,13 +62,13 @@ end
 local line = 1
 local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 for i, l in ipairs(lines) do
-  if l:find("func%s+ParseSentinelfindJSON", 1) then
+  if l:find("func%s+ParseErrsweepJSON", 1) then
     line = i
     break
   end
 end
 local text = lines[line] or ""
-local col = (string.find(text, "ParseSentinelfindJSON", 1, true) or 6) - 1
+local col = (string.find(text, "ParseErrsweepJSON", 1, true) or 6) - 1
 vim.api.nvim_win_set_cursor(0, {line, col})
 
 local function content_to_text(content)
@@ -185,7 +185,7 @@ if kill -0 "$NVIM_PID" >/dev/null 2>&1; then
 fi
 wait "$NVIM_PID" 2>/dev/null || true
 
-if grep -q "sentinel-lsp-proxy: loaded " "$PROXY_LOG" && grep -q "HOVER_OK" "$NVIM_LOG"; then
+if grep -q "errsweep-lsp-proxy: loaded " "$PROXY_LOG" && grep -q "HOVER_OK" "$NVIM_LOG"; then
   echo "nvim editor test: PASS"
 else
   echo "nvim editor test: FAIL"
