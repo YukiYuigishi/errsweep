@@ -155,6 +155,31 @@ func TestURIToWorkspacePath(t *testing.T) {
 	}
 }
 
+func TestShouldUpgradeToFull(t *testing.T) {
+	base := time.Unix(1000, 0)
+	cases := []struct {
+		name     string
+		now      time.Time
+		lastFull time.Time
+		interval time.Duration
+		want     bool
+	}{
+		{"disabled", base, base, 0, false},
+		{"negative disables", base, base, -time.Second, false},
+		{"never-ran upgrades", base, time.Time{}, 5 * time.Minute, true},
+		{"under interval", base.Add(4 * time.Minute), base, 5 * time.Minute, false},
+		{"equal interval", base.Add(5 * time.Minute), base, 5 * time.Minute, true},
+		{"over interval", base.Add(10 * time.Minute), base, 5 * time.Minute, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := shouldUpgradeToFull(tc.now, tc.lastFull, tc.interval); got != tc.want {
+				t.Fatalf("shouldUpgradeToFull(...) = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestShouldRunRefresh(t *testing.T) {
 	base := time.Unix(100, 0)
 	cases := []struct {

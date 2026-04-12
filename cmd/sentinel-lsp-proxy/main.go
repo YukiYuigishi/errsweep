@@ -86,6 +86,7 @@ func main() {
 	cachePattern := flag.String("cache-pattern", "./...", "sentinelfind の解析対象パッケージパターン")
 	cacheFile := flag.String("cache-file", "", "永続キャッシュファイルパス（未指定時: <workspace>/.errsweep/cache.gob）")
 	cacheRefreshMinInterval := flag.Duration("cache-refresh-min-interval", 2*time.Second, "キャッシュ再構築の最小間隔")
+	cacheFullRefreshInterval := flag.Duration("cache-full-refresh-interval", 5*time.Minute, "partial 再解析を full に昇格させる最小経過時間（0 で無効）")
 	flag.Parse()
 	proxy.SetBuildCacheTimeout(*cacheTimeout)
 	proxy.SetBuildCachePattern(*cachePattern)
@@ -108,12 +109,17 @@ func main() {
 	p := proxy.NewProxy(cache)
 	refreshCh := make(chan struct{}, 1)
 	pending := &pendingRefresh{}
+	initialFullRefresh := time.Now()
 
 	// 差分再解析: 保存/ファイル変更通知を受けたら debounce してキャッシュを再構築する。
 	// 変更が .go ファイルのみなら該当パッケージだけ partial で再解析し、既存キャッシュに
 	// マージする。go.mod/go.sum/go.work が変更されたら安全側に倒してフル再解析する。
+	// safety net: partial が続いて一定時間 full が走っていないと、依存パッケージの
+	// ホバーが drift する可能性があるため、経過 >= cacheFullRefreshInterval なら
+	// partial を full に昇格させる。
 	go func() {
 		var lastRefreshAttempt time.Time
+		lastFullRefresh := initialFullRefresh
 		for range refreshCh {
 			time.Sleep(300 * time.Millisecond) // debounce
 			now := time.Now()
@@ -122,6 +128,11 @@ func main() {
 			}
 			lastRefreshAttempt = now
 			full, pkgDirs := pending.drain()
+			upgraded := false
+			if !full && len(pkgDirs) > 0 && shouldUpgradeToFull(now, lastFullRefresh, *cacheFullRefreshInterval) {
+				full = true
+				upgraded = true
+			}
 			refreshStart := time.Now()
 			if full || len(pkgDirs) == 0 {
 				newCache, err := cacheLoader(*sentinelfindPath, *workspace)
@@ -131,7 +142,12 @@ func main() {
 					continue
 				}
 				p.SetCache(newCache)
-				log.Printf("sentinel-lsp-proxy: cache refreshed full (%d entries, %s)", newCache.Len(), refreshElapsed)
+				lastFullRefresh = time.Now()
+				if upgraded {
+					log.Printf("sentinel-lsp-proxy: cache refreshed full upgraded (%d entries, %s, drift-pkgs=%d)", newCache.Len(), refreshElapsed, len(pkgDirs))
+				} else {
+					log.Printf("sentinel-lsp-proxy: cache refreshed full (%d entries, %s)", newCache.Len(), refreshElapsed)
+				}
 				continue
 			}
 			partial, err := proxy.BuildCachePartial(*sentinelfindPath, *workspace, pkgDirs)
@@ -215,6 +231,19 @@ func shouldRunRefresh(now, last time.Time, minInterval time.Duration) bool {
 		return true
 	}
 	return now.Sub(last) >= minInterval
+}
+
+// shouldUpgradeToFull は partial 再解析を full に昇格させるべきかを返す。
+// interval <= 0 は safety net 無効（昇格しない）。
+// lastFull が zero の場合は「full を一度も走らせていない」状態で、保守的に昇格させる。
+func shouldUpgradeToFull(now, lastFull time.Time, interval time.Duration) bool {
+	if interval <= 0 {
+		return false
+	}
+	if lastFull.IsZero() {
+		return true
+	}
+	return now.Sub(lastFull) >= interval
 }
 
 // parseRefreshRequest は LSP クライアントメッセージから再解析要求を抽出する。
