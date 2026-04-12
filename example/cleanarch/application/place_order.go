@@ -23,14 +23,16 @@ import (
 // ======================================================================
 
 // compile-time assertion: errsweep はこの宣言から
-// OrderRepository → *SQLOrderRepository, *CachedOrderRepository の対応を抽出する。
+// OrderRepository → 各具象の対応を抽出する。
 var _ order.OrderRepository = (*persistence.SQLOrderRepository)(nil)
 var _ order.OrderRepository = (*persistence.CachedOrderRepository)(nil)
+var _ order.OrderRepository = (*persistence.MemoryOrderRepository)(nil)
 
-// compile-time assertion: PaymentGateway → Stripe, PayPal の両方を宣言。
+// compile-time assertion: PaymentGateway → 各プロバイダ実装の対応を宣言。
 // errsweep は全具象の sentinel を union で報告し、concrete ごとの内訳も表示する。
 var _ payment.PaymentGateway = (*gateway.StripeGateway)(nil)
 var _ payment.PaymentGateway = (*gateway.PayPalGateway)(nil)
+var _ payment.PaymentGateway = (*gateway.MockGateway)(nil)
 
 // PlaceOrderUseCase は注文確定ユースケース。
 // コンストラクタ DI でインターフェースを受け取る標準的な Clean Architecture パターン。
