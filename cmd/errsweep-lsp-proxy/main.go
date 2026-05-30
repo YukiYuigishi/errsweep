@@ -26,6 +26,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -84,22 +85,24 @@ func main() {
 	workspace := flag.String("workspace", ".", "解析対象のワークスペースディレクトリ")
 	cacheTimeout := flag.Duration("cache-timeout", 60*time.Second, "errsweep キャッシュ構築のタイムアウト")
 	cachePattern := flag.String("cache-pattern", "./...", "errsweep の解析対象パッケージパターン")
-	cacheFile := flag.String("cache-file", "", "永続キャッシュファイルパス（未指定時: <workspace>/.errsweep/cache.gob）")
+	cacheFile := flag.String("cache-file", "", "永続キャッシュファイルパス（未指定時: OS の一時ディレクトリ内の workspace 別 cache.gob）")
 	cacheRefreshMinInterval := flag.Duration("cache-refresh-min-interval", 2*time.Second, "キャッシュ再構築の最小間隔")
 	cacheFullRefreshInterval := flag.Duration("cache-full-refresh-interval", 5*time.Minute, "partial 再解析を full に昇格させる最小経過時間（0 で無効）")
 	flag.Parse()
 	proxy.SetBuildCacheTimeout(*cacheTimeout)
 	proxy.SetBuildCachePattern(*cachePattern)
 	proxy.SetBuildCacheFilePath(*cacheFile)
-	workspaceRoot, err := filepath.Abs(*workspace)
+	workspaceInput := normalizeWorkspaceFlag(*workspace)
+	workspaceRoot, err := filepath.Abs(workspaceInput)
 	if err != nil {
 		log.Fatalf("errsweep-lsp-proxy: resolve workspace path: %v", err)
 	}
+	resolvedGoplsPath := normalizeExecutablePath(*goplsPath)
 
 	// flag.Args() には VS Code が渡してくる gopls サブコマンド・フラグ（"serve" など）が入る
 	goplsSubArgs := flag.Args()
 	initialBuildStart := time.Now()
-	cache, err := cacheLoader(*errsweepPath, *workspace)
+	cache, err := cacheLoader(*errsweepPath, workspaceRoot)
 	initialBuildElapsed := time.Since(initialBuildStart)
 	if err != nil {
 		log.Printf("errsweep-lsp-proxy: cache build failed after %s (continuing without sentinels): %v", initialBuildElapsed, err)
@@ -135,7 +138,7 @@ func main() {
 			}
 			refreshStart := time.Now()
 			if full || len(pkgDirs) == 0 {
-				newCache, err := cacheLoader(*errsweepPath, *workspace)
+				newCache, err := cacheLoader(*errsweepPath, workspaceRoot)
 				refreshElapsed := time.Since(refreshStart)
 				if err != nil {
 					log.Printf("errsweep-lsp-proxy: cache refresh failed after %s: %v", refreshElapsed, err)
@@ -150,7 +153,7 @@ func main() {
 				}
 				continue
 			}
-			partial, err := proxy.BuildCachePartial(*errsweepPath, *workspace, pkgDirs)
+			partial, err := proxy.BuildCachePartial(*errsweepPath, workspaceRoot, pkgDirs)
 			refreshElapsed := time.Since(refreshStart)
 			if err != nil {
 				log.Printf("errsweep-lsp-proxy: cache refresh partial failed after %s (pkgs=%d): %v", refreshElapsed, len(pkgDirs), err)
@@ -163,7 +166,7 @@ func main() {
 
 	// gopls を子プロセスとして起動
 	// #nosec G204 -- goplsPath/goplsSubArgs はローカル開発者が明示指定するツール実行用引数。
-	gopls := exec.Command(*goplsPath, goplsSubArgs...)
+	gopls := exec.Command(resolvedGoplsPath, goplsSubArgs...)
 	goplsIn, err := gopls.StdinPipe()
 	if err != nil {
 		log.Fatal(err)
@@ -174,7 +177,7 @@ func main() {
 	}
 	gopls.Stderr = os.Stderr
 	if err := gopls.Start(); err != nil {
-		log.Fatalf("errsweep-lsp-proxy: failed to start %s: %v", *goplsPath, err)
+		log.Fatalf("errsweep-lsp-proxy: failed to start %s: %v", resolvedGoplsPath, err)
 	}
 
 	// エディタ → gopls へのパイプ（リクエストのトラッキング付き）
@@ -244,6 +247,26 @@ func shouldUpgradeToFull(now, lastFull time.Time, interval time.Duration) bool {
 		return true
 	}
 	return now.Sub(lastFull) >= interval
+}
+
+var whichCommandPattern = regexp.MustCompile(`^\$\(\s*which\s+([^\s)]+)\s*\)$`)
+
+func normalizeWorkspaceFlag(workspace string) string {
+	if workspace == "" {
+		return "."
+	}
+	workspace = strings.NewReplacer("${workspaceFolder}", ".", "${workspaceRoot}", ".").Replace(workspace)
+	if workspace == "" {
+		return "."
+	}
+	return workspace
+}
+
+func normalizeExecutablePath(path string) string {
+	if match := whichCommandPattern.FindStringSubmatch(path); len(match) == 2 {
+		return match[1]
+	}
+	return path
 }
 
 // parseRefreshRequest は LSP クライアントメッセージから再解析要求を抽出する。

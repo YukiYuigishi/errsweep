@@ -106,7 +106,17 @@ func resolveCacheFilePath(workspace string) string {
 	if buildCacheFilePath != "" {
 		return buildCacheFilePath
 	}
-	return filepath.Join(workspace, ".errsweep", "cache.gob")
+	return defaultCacheFilePath(workspace)
+}
+
+// defaultCacheFilePath は workspace と解析パターンに紐づく temp 配下の保存先を返す。
+func defaultCacheFilePath(workspace string) string {
+	workspaceAbs, err := filepath.Abs(workspace)
+	if err != nil {
+		workspaceAbs = workspace
+	}
+	key := sha256.Sum256([]byte(workspaceAbs + "\x00" + buildCachePattern))
+	return filepath.Join(os.TempDir(), "errsweep", hex.EncodeToString(key[:16]), "cache.gob")
 }
 
 // BuildCachePartial は pkgDirs で指定されたパッケージだけを errsweep で再解析し、

@@ -4,5 +4,6 @@
 /tmp/
 /.ci-cache/
 /.codex/
+/.claude/
 /.vscode/
 .errsweep/

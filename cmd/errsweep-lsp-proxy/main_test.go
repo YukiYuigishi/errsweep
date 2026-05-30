@@ -47,10 +47,10 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// exampleWorkspace はモジュールルートからの相対パスで example ディレクトリの絶対パスを返す。
+// exampleWorkspace はモジュールルートからの相対パスで example/basic ディレクトリの絶対パスを返す。
 func exampleWorkspace(t *testing.T) string {
 	t.Helper()
-	abs, err := filepath.Abs("../../example")
+	abs, err := filepath.Abs("../../example/basic")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -208,5 +208,77 @@ func TestE2E_HoverNoEntry(t *testing.T) {
 
 	if strings.Contains(string(raw), "Possible Sentinel Errors") {
 		t.Errorf("hover on non-sentinel line should not have sentinel section\ngot:\n%s", raw)
+	}
+}
+
+// TestE2E_ResolvesPlaceholderFlags は VS Code の設定に残りやすい placeholder 文字列を
+// プロキシが実行可能な値へ正規化できることを確認する。
+func TestE2E_ResolvesPlaceholderFlags(t *testing.T) {
+	ws := exampleWorkspace(t)
+	t.Setenv("PATH", filepath.Dir(dummyGoplsBin)+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	cmd := exec.Command(proxyBin,
+		"--gopls=$(which dummy-gopls)",
+		"--errsweep="+errsweepBin,
+		"--workspace=${workspaceFolder}",
+	)
+	cmd.Dir = ws
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := stdin.Close(); err != nil {
+			t.Logf("stdin close: %v", err)
+		}
+		if err := cmd.Wait(); err != nil {
+			t.Logf("wait: %v", err)
+		}
+	})
+
+	hoverReq := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "textDocument/hover",
+		"params": map[string]interface{}{
+			"textDocument": map[string]interface{}{
+				"uri": "file://" + ws + "/usecase/user.go",
+			},
+			"position": map[string]interface{}{
+				"line":      8,
+				"character": 5,
+			},
+		},
+	}
+	if _, err := stdin.Write(lspFrame(t, hoverReq)); err != nil {
+		t.Fatal(err)
+	}
+
+	r := bufio.NewReader(stdout)
+	raw, err := proxy.ReadMessage(r)
+	if err != nil {
+		t.Fatalf("read response: %v", err)
+	}
+
+	var resp struct {
+		Result struct {
+			Contents struct {
+				Value string `json:"value"`
+			} `json:"contents"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		t.Fatalf("unmarshal response: %v\nbody: %s", err, raw)
+	}
+	if !strings.Contains(resp.Result.Contents.Value, "Possible Sentinel Errors") {
+		t.Fatalf("hover response missing sentinel section\ngot:\n%s", resp.Result.Contents.Value)
 	}
 }

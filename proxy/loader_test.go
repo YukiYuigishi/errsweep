@@ -3,6 +3,7 @@ package proxy
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -126,7 +127,7 @@ func TestComputeSourceHash_SkipsCacheDirs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// .errsweep/cache.gob 内のファイルは hash 対象外であるべき
+	// キャッシュ用ディレクトリ内のファイルは hash 対象外であるべき
 	if err := os.MkdirAll(filepath.Join(dir, ".errsweep"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -161,13 +162,24 @@ func TestSetBuildCachePattern(t *testing.T) {
 
 func TestResolveCacheFilePath(t *testing.T) {
 	prev := buildCacheFilePath
-	t.Cleanup(func() { buildCacheFilePath = prev })
+	prevPattern := buildCachePattern
+	t.Cleanup(func() {
+		buildCacheFilePath = prev
+		buildCachePattern = prevPattern
+	})
 
+	SetBuildCachePattern("./daemon/...")
 	SetBuildCacheFilePath("")
 	got := resolveCacheFilePath("/workspace")
-	want := filepath.Join("/workspace", ".errsweep", "cache.gob")
-	if got != want {
-		t.Fatalf("resolveCacheFilePath default = %q, want %q", got, want)
+	prefix := filepath.Join(os.TempDir(), "errsweep") + string(filepath.Separator)
+	if !strings.HasPrefix(got, prefix) {
+		t.Fatalf("resolveCacheFilePath default = %q, want prefix %q", got, prefix)
+	}
+	if filepath.Base(got) != "cache.gob" {
+		t.Fatalf("resolveCacheFilePath base = %q, want cache.gob", filepath.Base(got))
+	}
+	if other := resolveCacheFilePath("/workspace-other"); other == got {
+		t.Fatalf("resolveCacheFilePath should differ per workspace, got %q", got)
 	}
 
 	SetBuildCacheFilePath("/tmp/custom.gob")
